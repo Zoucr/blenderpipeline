@@ -1,0 +1,216 @@
+{
+  "repository": "https://github.com/blender/blender",
+  "commit": "02c927c0ffd87e08aca64ceed572b5ff20556b1e",
+  "files": [
+    {
+      "name": "file_blend",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/file_blend.svg",
+      "sha256": "cbe5c8177ca58a9c6092f99b546c8c26085baa29d482fc076555538e2a7a8ea6"
+    },
+    {
+      "name": "file_folder",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/file_folder.svg",
+      "sha256": "f5823477533c18414a84dce21f1cca4713a22679ef8f14daed6ace6e37435cf9"
+    },
+    {
+      "name": "file_new",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/file_new.svg",
+      "sha256": "41830f1489a8ac3e721c10d6d4d579b9d5ffaed59327c5e2ddd5213a5c9733dc"
+    },
+    {
+      "name": "file_backup",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/file_backup.svg",
+      "sha256": "c099989a0955d2c8eff6fb4e440a65d506476406558377938d0b48b866afc218"
+    },
+    {
+      "name": "file_refresh",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/file_refresh.svg",
+      "sha256": "5d5250ecab6c77dd3c3b4e732ec95d357ed686f268c5a771fb1200da4d705ac8"
+    },
+    {
+      "name": "file_archive",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/file_archive.svg",
+      "sha256": "4609838127cc4d4c101c5ae6a891a29b70de5606c2f41f64001dffe9853e1fc3"
+    },
+    {
+      "name": "outliner_collection",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/outliner_collection.svg",
+      "sha256": "cb3ea48d45ed3615fa7c328e32e3eaeb9a0fe709ef4f4ad7a5bb27d013f8be5a"
+    },
+    {
+      "name": "outliner",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/outliner.svg",
+      "sha256": "5de220869ed5982bc1f5ec29ea1752fb9d39e825fe83cedf475ce2378dd8f84e"
+    },
+    {
+      "name": "nodetree",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/nodetree.svg",
+      "sha256": "96a765b612251e096630c8ae37c3613fc26f6b0c7024711dc7ad9a6d02d40ee9"
+    },
+    {
+      "name": "node_material",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/node_material.svg",
+      "sha256": "fa7c62469497c59eb1fc9e7c2c1b94b7fb4e1134a46be0f5de2b2a907fa21438"
+    },
+    {
+      "name": "linked",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/linked.svg",
+      "sha256": "e9179cafda0316f78afec0115b60a14277137130b87fe287e9473e2cffa854f7"
+    },
+    {
+      "name": "unlinked",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/unlinked.svg",
+      "sha256": "b5fa721ce02623761d622bb93529a8304b112b3666cfc08d1bff07ccdf16f85a"
+    },
+    {
+      "name": "link_blend",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/link_blend.svg",
+      "sha256": "cb69920ded0e1a26564b2a45b71697544b80558f19ae44dd4e985d43cf19601a"
+    },
+    {
+      "name": "duplicate",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/duplicate.svg",
+      "sha256": "60ee3f673bf26af0c5a2e380a58f5f1505f2cd755b93031c6bdbf4b14a5a0ef6"
+    },
+    {
+      "name": "render_still",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/render_still.svg",
+      "sha256": "8243bd06361e79d4a1387d4664cef7bd7cba76412a6670aa076058c9ff88a5b7"
+    },
+    {
+      "name": "render_animation",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/render_animation.svg",
+      "sha256": "9d0445e08692bae06028ee4f83f80e075a254851636fe0db26317bffa25f465e"
+    },
+    {
+      "name": "render_result",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/render_result.svg",
+      "sha256": "068a4979a7ea06d6e3c759610031e2ca1fb9704e8446943cad5e91f307711a61"
+    },
+    {
+      "name": "pinned",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/pinned.svg",
+      "sha256": "34b03f9436a3eb6e3e0dc6e1d8af06a01dbbda93f3d79906a3d36982aa485263"
+    },
+    {
+      "name": "unpinned",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/unpinned.svg",
+      "sha256": "f17b3c8271f6d2487fbfdd714c425b2150a4c6c00699f38f72a6527ffcc650ef"
+    },
+    {
+      "name": "add",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/add.svg",
+      "sha256": "b733beb2fe24f80b338012a30390d35fcb2139f4245ea85bd35c94d284cce950"
+    },
+    {
+      "name": "cancel",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/cancel.svg",
+      "sha256": "5cfe0b83d4ac5c7e23b2d6e1ca823bd2b65ce48b0eb20b66e39d693cf9edab9a"
+    },
+    {
+      "name": "checkmark",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/checkmark.svg",
+      "sha256": "a9192f3d01de6e583476a3ce72668dd0b67e946a0b641b03c9499ce7f52b1dfa"
+    },
+    {
+      "name": "status_warning",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/status_warning.svg",
+      "sha256": "bc6fa05f3041e140759d14c97922aa649c388a364156f330bf21831980fcad4c"
+    },
+    {
+      "name": "menu_panel",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/menu_panel.svg",
+      "sha256": "b49f020316f1afa80aad667f488b3cce4316a39ba97b615438a94c996a11d35a"
+    },
+    {
+      "name": "collapsemenu",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/collapsemenu.svg",
+      "sha256": "8b8ef050f308f904850326da2aa1183dca2b0b0671d9c8ca5fd84eec83f84155"
+    },
+    {
+      "name": "downarrow_hlt",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/downarrow_hlt.svg",
+      "sha256": "a63ad42be88cc5a85f5c86c25d3f8758b35cb83ac72e77cb5cfb034c01cc08d9"
+    },
+    {
+      "name": "rightarrow",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/rightarrow.svg",
+      "sha256": "e50f16e484028d48be768c6f255939d093fc640dd36ddaadebb53df597d98dd9"
+    },
+    {
+      "name": "time",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/time.svg",
+      "sha256": "35f46aca58db22f10fb35b0a2c59825bb87b9e0ea55ac1217a0b2f26617d05f2"
+    },
+    {
+      "name": "viewzoom",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/viewzoom.svg",
+      "sha256": "dc2f5a73110b92557e80212ff841283db6496e1cd68a9d025ae1bd3113ffe484"
+    },
+    {
+      "name": "filter",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/filter.svg",
+      "sha256": "364f1f589dd7e6ac02dcdb0b4026db3db313de876401be226b802a87bd46a58d"
+    },
+    {
+      "name": "newfolder",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/newfolder.svg",
+      "sha256": "9844c846d345062a74e5a59ebe0d90582fa3efbc232e90178873faedce643eb4"
+    },
+    {
+      "name": "filebrowser",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/filebrowser.svg",
+      "sha256": "f5823477533c18414a84dce21f1cca4713a22679ef8f14daed6ace6e37435cf9"
+    },
+    {
+      "name": "preferences",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/preferences.svg",
+      "sha256": "bea8826fd38ade0825b3e86b0078788fa12c4cf68d1cf86eb7455d5c2a913809"
+    },
+    {
+      "name": "settings",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/settings.svg",
+      "sha256": "57a0ec7ef8fca5d32d49ece992c220930b8c8fa7978bd4cc846521405d11a85a"
+    },
+    {
+      "name": "zoom_all",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/zoom_all.svg",
+      "sha256": "d2863a1497969bf3b809dc48328d2d8bad989a4ef5a263cbc9e6a65a6e60cc5e"
+    },
+    {
+      "name": "sortalpha",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/sortalpha.svg",
+      "sha256": "9027cb1acee9c946224a29045cf3ce94287832122c6bfc0c074f39916afa322d"
+    },
+    {
+      "name": "trash",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/trash.svg",
+      "sha256": "9a5afe73d1d1b3175c207e2c5444df284636539a4c03e0214d1b9a87ff3bdcac"
+    },
+    {
+      "name": "back",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/back.svg",
+      "sha256": "8970e9ee25818b70b6e217cc8c4b9349c4a65afb8d766e0bb0ec30d0df496cf7"
+    },
+    {
+      "name": "forward",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/forward.svg",
+      "sha256": "3b043cd19674cd4170557d018691f489edc2c83a4fce31ea65ae6343645b8473"
+    },
+    {
+      "name": "material",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/material.svg",
+      "sha256": "02d6e4195b49ba8d8d2b15d441de54997c27bf111724ae238f9765a59e093edf"
+    },
+    {
+      "name": "world",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/world.svg",
+      "sha256": "6f15de148ee3064afdaf8e350ec3f25faf2d6da926ce070cf14b2eeca9c83ed6"
+    },
+    {
+      "name": "scene_data",
+      "url": "https://raw.githubusercontent.com/blender/blender/02c927c0ffd87e08aca64ceed572b5ff20556b1e/release/datafiles/icons_svg/scene_data.svg",
+      "sha256": "75fdc32585c8756866649c546ccc235c59a3dd8f2521a8ccfcdc51023a5ee526"
+    }
+  ]
+}

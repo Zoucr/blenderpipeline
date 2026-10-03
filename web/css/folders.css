@@ -1,0 +1,23 @@
+body.navigatorOpen #navigator{width:var(--navigator-width)!important}body.navigatorOpen #workspace{left:var(--navigator-width)!important}#navigatorResize{display:none;position:absolute;left:calc(var(--navigator-width) - 3px);top:40px;bottom:26px;width:6px;cursor:col-resize;z-index:20}body.navigatorOpen #navigatorResize{display:block}#navigatorResize:hover,#navigatorResize:focus-visible{background:#8bb7d366}.folderContents{position:absolute;left:10px;right:10px;top:85px;display:flex;gap:10px;align-items:center;font-size:10px;color:#b7b1a5;pointer-events:none}.folderContents button{pointer-events:auto;font-size:10px;flex-shrink:0}.folderContents span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}.folderDiskEntry{font-size:11px;padding:5px 0;overflow-wrap:anywhere;border-bottom:1px solid #ffffff0b}.renderPathPreview{background:#25272a;padding:9px;border:1px solid #555;overflow-wrap:anywhere;white-space:pre-line}#contextMenu{max-height:calc(100vh - 70px);overflow-y:auto;min-width:215px}#dialog{max-height:85vh;overflow:auto}.node.folder .folderLabel{font-size:10px}.node.folder .folderTools{height:36px}.node.folder .folderContents{top:88px}.node.folder input.nodeName{width:100px}
+#navigator .uxTreeList,#navigator .uxTreeBranch{list-style:none;margin:0;padding:0;min-width:0}
+#navigator .uxTreeBranch{margin-left:7px;padding-left:12px;border-left:1px solid #ffffff20}
+#navigator .uxTreeItem{margin:0;padding:0;min-width:0}
+#navigator .uxTreeLine{display:flex;align-items:center;gap:2px;min-width:0}
+#navigator .uxTreeToggle,#navigator .uxTreeToggleSpace{width:16px;min-width:16px;flex:0 0 16px}
+#navigator .uxTreeToggle{height:26px;min-height:26px;padding:0;border:0;background:transparent;color:#aaa}
+#navigator .uxTreeToggle:hover{background:#ffffff12;color:#eee}#navigator .uxTreeToggle:disabled{opacity:.8;cursor:default}
+#navigator .uxTreeToggle .blIcon{width:12px;height:12px}
+#navigator .uxTree .uxFileRow{min-width:0;width:0;flex:1;gap:5px;padding:5px 4px;min-height:29px;--node-color:#445d6e}
+#navigator .uxTree .uxFileRow[data-kind=folder]{--node-color:#65583f;font-weight:600}
+#navigator .uxTree .uxFileRow[data-color=blue]{--node-color:#405f79}
+#navigator .uxTree .uxFileRow[data-color=green]{--node-color:#486454}
+#navigator .uxTree .uxFileRow[data-color=purple]{--node-color:#625271}
+#navigator .uxTree .uxFileRow[data-color=orange]{--node-color:#796144}
+#navigator .uxTree .uxFileRow[data-color=red]{--node-color:#754e52}
+#navigator .uxTreeColor{width:5px;height:17px;flex:0 0 5px;border-radius:2px;background:var(--node-color);box-shadow:0 0 0 1px #ffffff16}
+#navigator .uxTree .uxFileIcon{width:14px;flex:0 0 14px;display:flex;color:#c1c5c8}
+#navigator .uxTreeName{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:inherit}
+#navigator .uxTreeCount{flex-shrink:0;font-size:10px;color:#9ca0a3;font-weight:400;margin-left:auto}
+#navigator .uxTree .uxFileRow.multiSelected{box-shadow:inset 0 0 0 1px #91b3cd70;background:#3a4853}
+#navigator .uxTree .uxFileRow.active{background:#465b6b;box-shadow:inset 0 0 0 1px #9bc1db45}
+#navigator .uxTreeHint{font-size:9px;color:#898d91;margin-top:5px;line-height:1.4}

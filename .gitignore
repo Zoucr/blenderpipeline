@@ -1,0 +1,32 @@
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+.DS_Store
+Thumbs.db
+*.log
+
+# Local projects, Blender saves and generated downloads are not source.
+projects/
+renders/
+downloads/
+startup-templates/
+.pipeline/
+data/
+*.blend
+*.blend[0-9]*
+*.zip
+*.tmp
+
+# Personal settings and live connection credentials.
+clients/
+settings.json
+recent-projects.json
+startup-default.json
+ui-preferences.json
+storage-locations.json
+operation-jobs.json
+companion-connection.json
+.env
+.env.*
+!.env.example

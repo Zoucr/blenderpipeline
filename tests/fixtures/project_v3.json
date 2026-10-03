@@ -1,0 +1,100 @@
+{
+  "schema": 3,
+  "id": "legacy-project",
+  "name": "Legacy project",
+  "nodes": [
+    {
+      "id": "assets",
+      "type": "folder",
+      "name": "Assets",
+      "path": "Assets",
+      "x": 30,
+      "y": 40
+    },
+    {
+      "id": "source",
+      "type": "blend",
+      "name": "Materials",
+      "path": "Assets/Materials.blend",
+      "group": "assets",
+      "x": 50,
+      "y": 90,
+      "color": "purple",
+      "snapshots": [
+        {
+          "id": "state-1",
+          "number": 1,
+          "path": ".pipeline/history/source/001.blend"
+        }
+      ]
+    },
+    {
+      "id": "shot",
+      "type": "blend",
+      "name": "Shot",
+      "path": "Shot.blend",
+      "x": 400,
+      "y": 90,
+      "snapshots": [],
+      "scan": {
+        "data_links": [
+          {
+            "kind": "materials",
+            "name": "Gold",
+            "source": "Assets/Materials.blend"
+          }
+        ]
+      },
+      "render_config": {
+        "folder_id": "output",
+        "scene": "Scene",
+        "settings": {
+          "cycles.samples": 32
+        }
+      }
+    },
+    {
+      "id": "output",
+      "type": "folder",
+      "name": "Output",
+      "path": "Output",
+      "x": 700,
+      "y": 40
+    }
+  ],
+  "renders": [
+    {
+      "id": "run-1",
+      "node_id": "shot",
+      "number": 1,
+      "status": "Complete",
+      "output": "Output/Shot_r001"
+    }
+  ],
+  "render_queue": [],
+  "archived_files": [
+    {
+      "id": "archive-1",
+      "node": {
+        "id": "old-file",
+        "name": "Old"
+      }
+    }
+  ],
+  "templates": [
+    {
+      "id": "template-1",
+      "name": "My startup",
+      "path": ".pipeline/templates/startup.blend"
+    }
+  ],
+  "extension_data": {
+    "preserve": "unknown fields survive migration"
+  },
+  "revision": 0,
+  "view": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  }
+}
