@@ -1,6 +1,6 @@
 """Two local adapters must not share tokens, settings or application state."""
 import json
-import re
+from html.parser import HTMLParser
 import tempfile
 import threading
 import unittest
@@ -11,6 +11,21 @@ from types import SimpleNamespace
 
 from blender_pipeline.application.commands import Application
 from blender_pipeline.http.server import create_server
+
+
+class PageResources(HTMLParser):
+    """Check the URLs the browser will request, rather than hardcoded asset paths."""
+    def __init__(self):
+        super().__init__()
+        self.scripts = []
+        self.stylesheets = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'script' and attrs.get('src'):
+            self.scripts.append(attrs['src'])
+        if tag == 'link' and 'stylesheet' in attrs.get('rel', '').split():
+            self.stylesheets.append(attrs['href'])
 
 
 class ServerContextTests(unittest.TestCase):
@@ -52,12 +67,19 @@ class ServerContextTests(unittest.TestCase):
                     body = urllib.request.urlopen(f'http://127.0.0.1:{http.server_port}/').read().decode()
                     self.assertIn(http.token, body)
                     self.assertNotIn('__TOKEN__', body)
-                    scripts = re.findall(r"<script src='([^']+)'", body)
-                    self.assertEqual(scripts[0], '/js/ui_runtime.js')
-                    self.assertEqual(scripts[-1], '/js/app_bootstrap.js')
-                    for script in scripts:
-                        with urllib.request.urlopen(f'http://127.0.0.1:{http.server_port}{script}') as response:
-                            self.assertEqual(response.status, 200)
+                    resources = PageResources()
+                    resources.feed(body)
+                    self.assertEqual(resources.scripts[0], '/js/ui_runtime.js')
+                    self.assertEqual(resources.scripts[-1], '/js/app_bootstrap.js')
+                    self.assertTrue(resources.stylesheets, 'The page must declare its stylesheets.')
+                    for routes, mimes in ((resources.scripts, ('text/javascript', 'application/javascript')),
+                                          (resources.stylesheets, ('text/css',))):
+                        for route in routes:
+                            with self.subTest(resource=route):
+                                with urllib.request.urlopen(f'http://127.0.0.1:{http.server_port}{route}') as response:
+                                    self.assertEqual(response.status, 200)
+                                    self.assertIn(response.headers.get_content_type(), mimes)
+                                    self.assertTrue(response.read(), 'Page resources must not be empty.')
             finally:
                 for http in servers:
                     http.shutdown()
