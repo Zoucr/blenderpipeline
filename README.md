@@ -2,6 +2,8 @@
 
 A local, browser-based workspace for Blender projects: file and folder nodes, linked assets, snapshots, startup templates, and versioned renders. Version 1.18.0 reorganizes the working application into a source tree. It does not add a shared server or Flamenco integration.
 
+Version 1.18.1 preserves assigned materials when linking collections and objects as overrides, including after reopening. Reinstall the generated companion (1.6.1) to receive the same fix in Blender and the corrected local-material-copy action.
+
 ## Start
 
 Requires Python 3.11 or newer and Blender. The backend uses only the Python standard library; there is no npm install, frontend build step, or application dependency installation.

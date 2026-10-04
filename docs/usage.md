@@ -10,6 +10,8 @@ Add a file with its placeholder name, rename through its header, and use Open Bl
 
 Drag a linking connection between file nodes, then choose collections, objects, materials or other supported datablocks together in the linking dialog. Choose link/override behavior appropriate to the asset. Source files remain separate. Overrides and material assignments follow Blender's library rules; source material slots may require preparation.
 
+Selecting a collection or object automatically includes its assigned materials and their shader dependencies. You do not need to select those materials separately. Inherited mesh material slots stay linked to the source. In an editable object override, switch a slot to **Object** to assign a different material. The companion's **Make active material a local copy** creates an independent shader for that object; that copied shader stops receiving source shader updates.
+
 External libraries remain visible as external nodes. If their location is unavailable, use Map storage folder in the inspector. Mapping identifies a folder on this machine; localization is a separate operation that copies dependencies into the project.
 
 ## Snapshots and templates

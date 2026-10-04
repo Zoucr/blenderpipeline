@@ -19,7 +19,7 @@ elif action=='prepare_materials':
     if job.get('reload'):
         for library in list(bpy.data.libraries):
             if not library.parent:library.reload()
-    prepare_material_slots(job.get('objects'),strict=job.get('strict',True),required_slots=job.get('required_slots'))
+    prepare_material_slots(job.get('objects'),strict=job.get('strict',True),required_slots=job.get('required_slots'),prepare_empty_overrides=True)
 elif action == 'organize':
     bpy.ops.wm.open_mainfile(filepath=job['target'])
     for scene in bpy.data.scenes:

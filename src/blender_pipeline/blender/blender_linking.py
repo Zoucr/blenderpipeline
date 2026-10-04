@@ -3,8 +3,8 @@ import bpy
 from pathlib import Path
 KINDS=('actions','annotations','armatures','brushes','cache_files','cameras','curves','fonts','grease_pencils','hair_curves','images','lattices','lightprobes','lights','linestyles','masks','materials','meshes','metaballs','movieclips','node_groups','objects','paint_curves','palettes','particles','pointclouds','scenes','sounds','speakers','texts','textures','volumes','worlds')
 
-def prepare_material_slots(objects=None,strict=True,required_slots=None):
-    """A native override needs slots in its reference; store assignments on the object."""
+def prepare_material_slots(objects=None,strict=True,required_slots=None,prepare_empty_overrides=False):
+    """Prepare slot capacity while preserving materials inherited from mesh data."""
     changed=0;missing=[]
     for obj in list(bpy.data.objects):
         if objects is not None and obj.name not in objects:continue
@@ -15,8 +15,12 @@ def prepare_material_slots(objects=None,strict=True,required_slots=None):
             if len(obj.material_slots)>len(reference.material_slots) or not reference.material_slots:
                 missing.append(obj.name);continue
             if obj.override_library.is_system_override:continue
+            # Switching an inherited DATA binding to OBJECT can appear correct until
+            # Blender rebuilds the override on reopen, then become an empty binding.
+            # Keep native inheritance; explicit material/shader assignment sets OBJECT.
+            if not prepare_empty_overrides:continue
             for slot in obj.material_slots:
-                if slot.link=='OBJECT':continue
+                if slot.link=='OBJECT' or slot.material is not None:continue
                 material=slot.material;slot.link='OBJECT';slot.material=material;changed+=1
         elif not obj.data.library and not obj.data.override_library:
             needed=max(1,(required_slots or {}).get(obj.name,1))

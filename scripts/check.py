@@ -8,7 +8,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-BLENDER_CHECKS = ('verify_api.py', 'verify_batch_linking.py', 'verify_material_persistence.py',
+BLENDER_CHECKS = ('verify_api.py', 'verify_batch_linking.py', 'verify_material_persistence.py', 'verify_collection_materials.py',
                   'verify_folders.py', 'verify_templates.py', 'verify_external.py',
                   'verify_companion.py', 'verify_render_manager.py', 'verify_app_startup.py',
                   'verify_browser_archive.py')

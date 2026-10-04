@@ -1,4 +1,4 @@
-bl_info={'name':'Pipeline Companion','author':'Local Pipeline','version':(1,6,0),'blender':(5,0,0),'location':'3D View > Sidebar > Pipeline','description':'Local project enrollment, live status, snapshots and collection linking','category':'Pipeline'}
+bl_info={'name':'Pipeline Companion','author':'Local Pipeline','version':(1,6,1),'blender':(5,0,0),'location':'3D View > Sidebar > Pipeline','description':'Local project enrollment, live status, snapshots and collection linking','category':'Pipeline'}
 import bpy,json,os,time,uuid,hashlib,zlib
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -223,7 +223,8 @@ class PIPELINE_OT_local_material(bpy.types.Operator):
     def execute(self,context):
         obj=context.object
         if not obj or obj.library or not obj.active_material:self.report({'ERROR'},'Choose an editable object with an active material');return {'CANCELLED'}
-        slot=obj.material_slots[obj.active_material_index];slot.link='OBJECT';slot.material=obj.active_material.copy();slot.material.name+=' Local'
+        material=obj.active_material
+        slot=obj.material_slots[obj.active_material_index];slot.link='OBJECT';slot.material=material.copy();slot.material.name+=' Local'
         self.report({'INFO'},'Local copy created. Source shader changes no longer update this copy.');return {'FINISHED'}
 class PIPELINE_OT_reload(bpy.types.Operator):
     bl_idname='pipeline.reload_links';bl_label='Save + Reload linked assets';bl_description='Save a snapshot before reloading libraries; Blender handles automatic override resynchronization'
