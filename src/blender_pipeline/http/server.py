@@ -11,6 +11,12 @@ from blender_pipeline.rendering.output_browser import OutputMedia
 
 
 class Handler(BaseHTTPRequestHandler):
+    def handle(self):
+        try:
+            super().handle()
+        except (ConnectionError, TimeoutError):
+            self.close_connection = True  # Browser reloads/closing cancel requests.
+
     def setup(self):
         self.request.settimeout(15)
         super().setup()
@@ -104,6 +110,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             if isinstance(result, dict) and isinstance(result.get('project'), dict):
                 self.send_header('ETag', '"' + str(result['project']['revision']) + '"')
+        except (ConnectionError, TimeoutError):
+            raise  # A disconnected socket cannot receive an error response.
         except Exception as exc:
             body = json.dumps({'error': str(exc), 'code': getattr(exc, 'code', 'invalid_request')}).encode()
             self.send_response(getattr(exc, 'status', 400))

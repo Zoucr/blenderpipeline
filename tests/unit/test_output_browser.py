@@ -182,5 +182,23 @@ class OutputHttpTests(unittest.TestCase):
         handler.dispatch_post()
         handler.send_response.assert_called_once_with(200)
 
+    def test_disconnect_during_headers_ends_request_without_console_traceback(self):
+        import io
+        from blender_pipeline.http.server import Handler
+        from blender_pipeline.rendering.output_browser import OutputMedia
+        handler = Handler.__new__(Handler)
+        path = self.app.model.root / 'Outputs/r001/image.png'
+        handler.server = SimpleNamespace(token='test-token', application=SimpleNamespace(dispatch=lambda *args: OutputMedia(path, 'image/png')))
+        handler.path = '/output_image'; handler.headers = {'X-Pipeline-Token': 'test-token', 'Content-Length': '2'}
+        handler.rfile = io.BytesIO(b'{}'); handler.wfile = Mock()
+        handler.send_response = Mock(); handler.send_header = Mock()
+        handler.end_headers = Mock(side_effect=ConnectionAbortedError('browser closed'))
+        with patch('http.server.BaseHTTPRequestHandler.handle', side_effect=handler.dispatch_post):
+            handler.handle()
+        self.assertTrue(handler.close_connection)
+        handler.send_response.assert_called_once_with(200)
+        with patch('http.server.BaseHTTPRequestHandler.handle', side_effect=RuntimeError('actual server bug')):
+            with self.assertRaisesRegex(RuntimeError, 'actual server bug'): handler.handle()
+
 
 if __name__ == '__main__': unittest.main()
