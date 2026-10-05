@@ -32,6 +32,7 @@ def main():
         pass
     finally:
         http.server_close()
+        app.model.stop_render_workers()
         app.tasks.pool.shutdown(wait=True)
         try:
             if json.loads(connection.read_text())['token'] == token:

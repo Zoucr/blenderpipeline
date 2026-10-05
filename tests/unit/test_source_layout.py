@@ -56,7 +56,7 @@ class SourceLayoutTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             archive = build_addon(Path(directory) / 'Companion.zip')
             with zipfile.ZipFile(archive) as package:
-                self.assertEqual(set(package.namelist()), {'pipeline_companion/__init__.py', 'pipeline_companion/blender_linking.py'})
+                self.assertEqual(set(package.namelist()), {'pipeline_companion/__init__.py', 'pipeline_companion/material_assistant.py', 'pipeline_companion/blender_linking.py'})
                 source = package.read('pipeline_companion/__init__.py').decode()
                 self.assertNotIn('__PIPELINE_CONNECTION__', source)
                 self.assertNotIn(str(SOURCE_ROOT), source)

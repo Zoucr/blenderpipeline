@@ -19,10 +19,22 @@ class Bridge:
         model=self.model
         snapshot=self.tasks.state() if getattr(self,'tasks',None) else model.state()
         data=snapshot.get('project') or {}
+        recent_queue={q['id'] for q in data.get('render_queue',[])[-50:]}
+        operation_outputs={}
+        for node in data.get('nodes',[]):
+            targets=[t for t in snapshot.get('render_targets',[]) if t.get('source_id')==node['id']]
+            target=next((t for t in targets if t['render_config']['scene']==node.get('scan',{}).get('active_scene')), targets[0] if targets else None)
+            if target:operation_outputs[node['id']]=target['render_config']
         return {'root':snapshot.get('root',''), 'project_id':data.get('id',''),
             'revision':data.get('revision'),
             'files':[{'id':n['id'],'name':n['name'],'path':str(model.path(n)),
-                'collections':n.get('scan',{}).get('collection_details',[]),'datablocks':n.get('scan',{}).get('datablocks',[])} for n in data.get('nodes',[]) if n['type']=='blend' and not n.get('hidden') and not snapshot.get('files',{}).get(n['id'],{}).get('missing')],
+                'collections':n.get('scan',{}).get('collection_details',[]),'datablocks':n.get('scan',{}).get('datablocks',[]),
+                'render_config':copy.deepcopy(n.get('render_config') or operation_outputs.get(n['id'],{}))} for n in data.get('nodes',[]) if n['type']=='blend' and not n.get('hidden') and not snapshot.get('files',{}).get(n['id'],{}).get('missing')],
+            'folders':[{'id':n['id'],'name':n['name'],'path':n['path']} for n in data.get('nodes',[]) if n['type']=='folder' and not n.get('hidden')],
+            'render_queue':[{'id':q['id'],'node_id':q['node_id'],'status':q['status'],'scene':q['settings']['scene'],
+                'start':q.get('effective_settings',q['settings']).get('start'),'end':q.get('effective_settings',q['settings']).get('end'),
+                'run_id':q.get('run_id',''),'error':q.get('error',''),
+                'progress':next((r.get('progress',0) for r in data.get('renders',[]) if r['id']==q.get('run_id')),0)} for q in data.get('render_queue',[]) if q['id'] in recent_queue or q['status'] in {'Queued','Preparing','Rendering'}],
             'jobs':[{'id':j['id'],'status':j['status'],'error':j.get('error',''),'result':j.get('companion_result')} for j in getattr(self,'tasks',None).jobs.values()] if getattr(self,'tasks',None) else []}
     def heartbeat(self,session_id,file='',dirty=False,pid=0,version='',collections=None,libraries=None,overrides=0):
         if not session_id or len(session_id)>100:raise ValueError('Invalid session')

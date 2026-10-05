@@ -61,7 +61,7 @@ class OperationContracts:
         if action not in {'create','load'}:
             if not explicit:raise ValueError('Project ID is required. Refresh the interface and submit again.')
             if not current or project_id!=current:raise ProjectContextError('Project changed. Choose the intended project again; nothing was applied.')
-            if action not in {'launch','render_open','read_render_settings','project_view','storage_locations'} and revision is None:
+            if action not in {'launch','render_open','read_render_settings','output_files','output_image','project_view','storage_locations'} and revision is None:
                 raise ValueError('Expected project revision is required.')
         context={'project_id':project_id,'expected_revision':revision,'request_id':request_id,'client_id':client_id}
         # Enrollment validates the project again within its domain operation.

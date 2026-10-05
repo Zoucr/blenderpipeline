@@ -281,6 +281,7 @@ class Pipeline:
     def launch(self,node_id):
         self.require_desktop()
         node=self.node(node_id)
+        if node['type'] not in {'blend','folder'}:raise ValueError('Choose a Blend file or folder to open.')
         if node['type']=='folder':
             self.desktop.open_folder(self.path(node),self.desktop_available())
             return self.state()

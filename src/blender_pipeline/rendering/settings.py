@@ -1,10 +1,57 @@
 """Explicit output scopes, selective settings and owned render-version cleanup."""
 import copy, json, math, re, shutil
 from pathlib import Path
-from blender_pipeline.project.model import META, name, stamp
+from blender_pipeline.project.model import META, name, stamp, digest
+from blender_pipeline.project.folders import dated_prefix
 from blender_pipeline.blender.blender_render_settings import validate as validate_advanced
+from blender_pipeline.blender.render_layers import selection
 
 class RenderManagement:
+    def companion_render(self,node_id,scene,camera,start,end,percentage=None,prefix=None,folder_name='',folder_id=None,use_connected=True,expected_hash=None,allow_image_warnings=False):
+        """Submit the saved active scene without replacing graph render overrides."""
+        with self.lock:
+            node=self.node(node_id)
+            if node['type']!='blend' or node.get('external'):raise ValueError('Register a managed working Blend File first.')
+            if expected_hash and digest(self.path(node))!=expected_hash:raise ValueError('Working file changed after its checkpoint. Save and submit again.')
+            if any(q['node_id']==node_id and q['status'] in {'Queued','Preparing','Rendering'} for q in self.data.get('render_queue',[])):
+                raise ValueError('This file is already queued. Finish or cancel its render first.')
+            self.refresh(node_id)
+            saved=next((s for s in node['scan'].get('scenes',[]) if s['name']==scene and not s.get('linked')),None)
+            if not saved or camera not in saved['cameras']:raise ValueError('Choose a saved local scene with an active camera.')
+            values=self.checked_overrides({'start':start,'end':end,**({'percentage':percentage} if percentage is not None else {})})
+            if values['end']<values['start'] or values['end']-values['start']>10000:raise ValueError('Invalid frame range.')
+            automatic=prefix is None
+            prefix=dated_prefix(scene) if automatic else name(prefix)
+            # Fail dependency/unsaved-input checks before creating any output directories.
+            if type(allow_image_warnings) is not bool:raise ValueError('Image warning consent must be enabled or disabled.')
+            expected_inputs=self.capture_render_inputs(node,allow_image_warnings=allow_image_warnings)
+            if expected_hash and expected_inputs.get(node['path'])!=expected_hash:raise ValueError('Working file changed after its checkpoint. Save and submit again.')
+            connected=copy.deepcopy(node.get('render_config') or {})
+            operation=next((t for t in self.render_targets() if t.get('source_id')==node_id and t['render_config']['scene']==scene),None) if not connected else None
+            if not connected and operation:connected=copy.deepcopy(operation['render_config'])
+            destination=folder_id or (connected.get('folder_id') if use_connected else None)
+            if destination:
+                folder=self.node(destination)
+                if folder['type']!='folder':raise ValueError('Choose an output folder node.')
+            else:
+                folder_name=name(folder_name or 'Out_'+scene)
+                folder=next((n for n in self.data['nodes'] if n['type']=='folder' and n['path']==folder_name),None)
+                if not folder:
+                    self.folder(folder_name);folder=self.data['nodes'][-1]
+                destination=folder['id']
+            # A new target becomes visible in the graph; existing per-scene overrides survive.
+            if not connected:
+                self.render_config(node_id,destination,scene,auto_prefix=True)
+            elif not operation and connected.get('folder_id')!=destination:
+                node['render_config']={**connected,'folder_id':destination};self.save()
+            settings={'folder_id':destination,'scene':scene,'camera':camera,**values,'percentage':percentage,'prefix':prefix,'auto_prefix':automatic}
+            if operation:
+                settings.update({k:connected[k] for k in ('operation_id','target_id','output_subfolder')})
+            result=self.queue_render(node_id,settings=settings,label='From Blender · '+scene,expected_inputs=expected_inputs,allow_image_warnings=allow_image_warnings)
+            job=self.data['render_queue'][-1]
+            result['companion_result']={'queue_id':job['id'],'node_id':node_id,'scene':scene,'start':start,'end':end,'folder_id':destination}
+            return result
+
     def read_render_settings(self,node_id):
         with self.lock:
             node=self.node(node_id)
@@ -29,7 +76,7 @@ class RenderManagement:
 
     def checked_overrides(self,settings):
         settings=copy.deepcopy(settings or {})
-        ranges={'width':(4,65536),'height':(4,65536),'percentage':(1,100),'samples':(1,1048576),'start':(-1048574,1048574),'end':(-1048574,1048574)}
+        ranges={'width':(4,65536),'height':(4,65536),'percentage':(1,100),'samples':(1,1048576),'start':(-1048574,1048574),'end':(-1048574,1048574),'step':(1,10000)}
         enums={'engine':{'CYCLES','BLENDER_EEVEE'},'format':{'PNG','OPEN_EXR','OPEN_EXR_MULTILAYER','JPEG','FFMPEG'}}
         for key,value in settings.items():
             if key=='advanced':
@@ -62,12 +109,18 @@ class RenderManagement:
         if not scene:raise ValueError(node['name']+': refresh and select a saved local scene.')
         if advanced:result['advanced']=validate_advanced(advanced,scene.get('advanced_settings',[]))
         else:result.pop('advanced',None)
+        result.update(selection(scene, node.get('scan',{}).get('scenes',[]), result.get('view_layer',''), result.get('compositor','BLENDER'), advanced))
         if self.node(result['folder_id'])['type']!='folder':raise ValueError('Output folder is missing.')
         result['camera']=result.get('camera') or scene.get('camera')
         if result['camera'] not in scene['cameras']:raise ValueError(node['name']+': choose a saved scene camera.')
         for key in ('start','end'):
             if result.get(key) is None:result[key]=scene[key]
-        values={k:v for k,v in result.items() if k in {'width','height','percentage','samples','start','end','engine','format','denoise'} and v is not None}
+        if result.get('step') is None:result['step']=scene.get('step',1)
+        if result.get('mode')=='STILL':
+            frame=result.get('frame') if result.get('frame') is not None else scene.get('current_frame',scene['start'])
+            result['start']=result['end']=frame
+            if (result.get('format') or scene.get('format'))=='FFMPEG':raise ValueError('A still setup requires an image format, not video. Choose PNG or OpenEXR.')
+        values={k:v for k,v in result.items() if k in {'width','height','percentage','samples','start','end','step','engine','format','denoise'} and v is not None}
         result.update(self.checked_overrides(values))
         engine=result.get('engine') or scene.get('engine')
         if result.get('denoise') is not None and engine!='CYCLES':raise ValueError(node['name']+': denoising override requires Cycles. Disable it or override the engine to Cycles.')
@@ -112,4 +165,6 @@ class RenderManagement:
             directory=(self.root/run[key]).resolve()
             paths=[p for p in directory.rglob('*') if p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(directory)]
             run[field]=sum(p.stat().st_size for p in paths)
-            if key=='output':run['file_count']=sum(p.suffix.lower() not in {'.json','.log'} for p in paths)
+            if key=='output':
+                run['file_count']=sum(p.suffix.lower() not in {'.json','.log'} for p in paths)
+                run['image_count']=sum(p.suffix.lower() in {'.png','.jpg','.jpeg','.exr','.tif','.tiff','.webp','.bmp'} for p in paths)

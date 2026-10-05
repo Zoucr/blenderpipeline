@@ -167,9 +167,10 @@ class BlenderRuntimeTests(unittest.TestCase):
         runtime = BlenderRuntime('/scripts', runner=runner)
         runtime.run('blender', 'scan_blend.py', ['scan.json', 4], opened='Shot.blend')
         command = runner.call_args.args[0]
-        self.assertEqual(command[:5], ['blender', '--background', '--factory-startup', '--disable-autoexec', 'Shot.blend'])
+        self.assertEqual(command[:5], ['blender', '--background', '--factory-startup', '--disable-autoexec', str(Path('Shot.blend').resolve())])
         self.assertEqual(command[-3:], ['--', 'scan.json', '4'])
         self.assertEqual(runner.call_args.kwargs['timeout'], 180)
+        self.assertFalse(Path(runner.call_args.kwargs['cwd']).exists())
         runner.return_value = SimpleNamespace(returncode=1, stdout='failure', stderr='details')
         with self.assertRaisesRegex(ValueError, 'failuredetails'):
             runtime.run('blender', 'scan_blend.py', [])

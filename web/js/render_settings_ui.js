@@ -1,16 +1,45 @@
-/* Advanced controls are opt-in and come from the saved file's Blender RNA. */
-function advancedSettingsEditor(parent,scene,initial={}){
-  const values=structuredClone(initial),entries=scene.advanced_settings||[],root=el('details',undefined,'rmAllSettings'),summary=el('summary'),intro=muted('Browse the saved scene’s Blender render settings. Enable only settings you want to change for renders. Paths and versions are managed here; curves, device preferences and node wiring are edited in Blender.'),tools=el('div',undefined,'rmAdvancedTools'),search=el('input'),category=el('select'),changed=el('input'),only=el('label','Changes only'),list=el('div',undefined,'rmAdvancedList');search.placeholder='Search settings, e.g. bounces, exposure, passes';search.setAttribute('aria-label','Search all Blender render settings');category.setAttribute('aria-label','Blender render settings category');for(const group of ['All categories',...new Set(entries.map(e=>e.category))]){const o=el('option',group);o.value=group;category.append(o);}changed.type='checkbox';changed.setAttribute('aria-label','Show only changed Blender settings');only.prepend(changed);tools.append(search,category,only);root.append(summary,intro,tools,list);parent.append(root);let limit=40;
-  function count(){summary.textContent='All Blender render settings'+(Object.keys(values).length?' · '+Object.keys(values).length+(Object.keys(values).length===1?' change':' changes'):'');}count();
-  function draw(){list.replaceChildren();const query=search.value.trim().toLowerCase(),found=entries.filter(e=>(category.value==='All categories'||e.category===category.value)&&(!changed.checked||e.key in values)&&[e.label,e.description,e.property,e.category].join(' ').replace(/_/g,' ').toLowerCase().includes(query.replace(/_/g,' ')));list.append(muted(`${found.length} settings · ${Object.keys(values).length} render ${Object.keys(values).length===1?'change':'changes'}`));if(Object.keys(values).length)list.append(button('Reset advanced changes',()=>{for(const key of Object.keys(values))delete values[key];count();draw();}));for(const key of Object.keys(values).filter(k=>!entries.some(e=>e.key===k))){const box=el('div',undefined,'warning');box.append(muted('Saved override is unavailable after refresh: '+key),button('Remove unavailable override',()=>{delete values[key];count();draw();}));list.append(box);}for(const entry of found.slice(0,limit)){
-      const row=el('div',undefined,'rmRNASetting'),title=el('label'),enable=el('input');enable.type='checkbox';enable.checked=entry.key in values;enable.disabled=!entry.editable;enable.setAttribute('aria-label','Override '+entry.category+' / '+entry.label);title.append(enable,el('strong',entry.label));const meta=el('div',undefined,'rmRNAMeta');meta.append(muted(entry.category),muted(entry.description||entry.property));row.append(title,meta);const controls=el('div',undefined,'rmRNAValue');let read;
-      function input(type,value,name=entry.label){const e=el('input');e.type=type;e.value=value??'';e.setAttribute('aria-label',entry.category+' / '+name);if(type==='number'){e.min=String(entry.min);e.max=String(entry.max);e.step=entry.type==='INT'?'1':'any';}controls.append(e);return e;}
-      const value=values[entry.key]??entry.value,origin=muted('');
-      if(entry.array){const components=value.map((v,i)=>input(entry.type==='BOOLEAN'?'checkbox':entry.type==='STRING'?'text':'number',v,entry.label+' '+(i+1)));components.forEach((e,i)=>{if(entry.type==='BOOLEAN')e.checked=value[i];});read=()=>components.map(e=>entry.type==='BOOLEAN'?e.checked:entry.type==='STRING'?e.value:Number(e.value));}
-      else if(entry.type==='BOOLEAN'){const e=input('checkbox','');e.checked=!!value;read=()=>e.checked;}
-      else if(entry.type==='ENUM'&&entry.options?.length){const e=el('select');e.setAttribute('aria-label',entry.category+' / '+entry.label);e.multiple=!!entry.flags;const choices=[...entry.options];for(const saved of (entry.flags?value:[value]))if(!choices.some(o=>o.value===saved))choices.push({value:saved,label:String(saved)});for(const option of choices){const o=el('option',option.label);o.value=option.value;o.selected=entry.flags?value.includes(option.value):value===option.value;e.append(o);}controls.append(e);read=()=>entry.flags?[...e.selectedOptions].map(o=>o.value):e.value;}
-      else {const e=input(['INT','FLOAT'].includes(entry.type)?'number':'text',entry.flags?value.join(','):value);read=()=>['INT','FLOAT'].includes(entry.type)?Number(e.value):entry.flags?e.value.split(',').map(v=>v.trim()).filter(Boolean):e.value;}
-      function sync(){const enabled=entry.editable&&enable.checked;row.classList.toggle('enabled',enabled);for(const e of controls.querySelectorAll('input,select'))e.disabled=!enabled;origin.textContent=entry.editable?(enabled?'Render change · source file stays saved as-is':'Uses saved Blender value'):entry.reason;}sync();enable.onchange=()=>{if(enable.checked)values[entry.key]=read();else delete values[entry.key];sync();count();};controls.oninput=()=>{if(enable.checked){values[entry.key]=read();count();}};row.append(controls,origin);list.append(row);
-    }if(!found.length)list.append(muted(entries.length?'No settings match these filters.':'Refresh this file to load its Blender settings.'));if(found.length>limit)list.append(button('Show more settings',()=>{limit+=40;draw();}));}
-  search.oninput=category.onchange=changed.onchange=()=>{limit=40;draw();};draw();return {root,read:()=>structuredClone(values)};
+/* Saved RNA settings, grouped like Blender panels with one outer scrollbar. */
+function advancedSettingsEditor(parent,scene,initial={},options={}){
+  const values=structuredClone(initial),entries=(scene.advanced_settings||[]).filter(e=>!e.common),root=el('div',undefined,'rmAllSettings'),tools=el('div',undefined,'rmAdvancedTools'),search=el('input'),changed=el('input'),only=el('label','Overrides only'),list=el('div',undefined,'rmAdvancedList'),groups=new Map();
+  search.placeholder='Find Blender setting…';search.setAttribute('aria-label','Search all Blender render settings');changed.type='checkbox';changed.setAttribute('aria-label','Show only changed Blender settings');only.prepend(changed);tools.append(search,only);root.append(tools,list);parent.append(root);
+  const notify=()=>options.onchange?.();
+  function rowFor(entry){
+    const row=el('div',undefined,'rmRNASetting'),title=el('label'),enable=el('input'),controls=el('div',undefined,'rmRNAValue');enable.type='checkbox';enable.checked=entry.key in values;enable.disabled=!entry.editable;enable.setAttribute('aria-label','Override '+entry.category+' / '+entry.label);title.append(enable,el('span',entry.label));title.title=entry.description||entry.property;row.title=[entry.description,entry.reason].filter(Boolean).join('\n');row.append(title,controls);let read;
+    function input(type,value,name=entry.label){const e=el('input');e.type=type;e.value=value??'';e.setAttribute('aria-label',entry.category+' / '+name);if(type==='number'){e.min=String(entry.min);e.max=String(entry.max);e.step=entry.type==='INT'?'1':'any';}controls.append(e);return e;}
+    const value=values[entry.key]??entry.value;
+    if(entry.array){const components=value.map((v,i)=>input(entry.type==='BOOLEAN'?'checkbox':entry.type==='STRING'?'text':'number',v,entry.label+' '+(i+1)));components.forEach((e,i)=>{if(entry.type==='BOOLEAN')e.checked=value[i];});read=()=>components.map(e=>entry.type==='BOOLEAN'?e.checked:entry.type==='STRING'?e.value:Number(e.value));}
+    else if(entry.type==='BOOLEAN'){const e=input('checkbox','');e.checked=!!value;read=()=>e.checked;}
+    else if(entry.type==='ENUM'&&entry.options?.length){const e=el('select');e.setAttribute('aria-label',entry.category+' / '+entry.label);e.multiple=!!entry.flags;const choices=[...entry.options];for(const saved of (entry.flags?value:[value]))if(!choices.some(o=>o.value===saved))choices.push({value:saved,label:String(saved)});for(const option of choices){const o=el('option',option.label);o.value=option.value;o.selected=entry.flags?value.includes(option.value):value===option.value;e.append(o);}controls.append(e);read=()=>entry.flags?[...e.selectedOptions].map(o=>o.value):e.value;}
+    else{const e=input(['INT','FLOAT'].includes(entry.type)?'number':'text',entry.flags?value.join(','):value);read=()=>['INT','FLOAT'].includes(entry.type)?Number(e.value):entry.flags?e.value.split(',').map(v=>v.trim()).filter(Boolean):e.value;}
+    function sync(){const enabled=entry.editable&&enable.checked;row.classList.toggle('enabled',enabled);for(const e of controls.querySelectorAll('input,select'))e.disabled=!enabled;row.dataset.origin=enabled?'Override':'Saved';}
+    sync();enable.onchange=()=>{if(enable.checked)values[entry.key]=read();else delete values[entry.key];sync();updateCounts();notify();};controls.oninput=()=>{if(enable.checked){values[entry.key]=read();updateCounts();notify();}};return row;
+  }
+  function updateCounts(){for(const {summary,entries:items} of groups.values()){const count=items.filter(e=>e.key in values).length;summary.querySelector('small').textContent=count?count+' override'+(count===1?'':'s'):'';}}
+  function draw(){
+    list.replaceChildren();groups.clear();const query=search.value.trim().toLowerCase().replace(/_/g,' '),found=entries.filter(e=>(!changed.checked||e.key in values)&&[e.label,e.description,e.property,e.category].join(' ').replace(/_/g,' ').toLowerCase().includes(query));
+    for(const category of [...new Set(found.map(e=>e.category))]){
+      const items=found.filter(e=>e.category===category),box=renderPanel(category,(options.key||'rna')+':'+category,false),summary=box.querySelector('summary'),content=el('div',undefined,'rmCategoryFields');summary.append(el('small',''));box.classList.add('rmSettingGroup');box.append(content);let painted=false;
+      function populate(){if(painted)return;painted=true;content.append(...items.map(rowFor));}
+      const toggle=box.ontoggle;box.ontoggle=()=>{toggle();if(box.open)populate();};if(query||changed.checked)box.open=true;if(box.open)populate();list.append(box);groups.set(category,{summary,entries:items});
+    }
+    for(const key of Object.keys(values).filter(k=>!entries.some(e=>e.key===k))){const warning=el('div',undefined,'warning');warning.append(el('span','Unavailable override'),button('Remove',()=>{delete values[key];draw();notify();}));warning.title=key;list.append(warning);}
+    if(!found.length)list.append(muted(entries.length?'No matching settings':'No additional settings in the saved file'));
+    updateCounts();
+  }
+  search.oninput=changed.onchange=draw;draw();return {root,read:()=>structuredClone(values)};
+}
+function lazyRenderSettings(parent,initial,loader,key,onchange=()=>{}){
+  const root=el('div',undefined,'rmSettingsCatalogue');parent.append(root);let editor=null,loading=null,values=structuredClone(initial||{});
+  async function load(){
+    if(editor||loading)return loading;
+    root.replaceChildren(el('span','Loading Blender settings…','muted'));
+    loading=(async()=>{try{const entries=await loader();if(!root.isConnected)return;root.replaceChildren();editor=advancedSettingsEditor(root,{advanced_settings:entries},values,{key,onchange});}catch(e){root.replaceChildren(button('Retry loading settings',()=>{loading=null;load();}));root.title=String(e);}})();return loading;
+  }
+  return {root,load,read:()=>editor?editor.read():structuredClone(values)};
+}
+function renderSettingsCatalogue(parent,initial,loader,key,onchange=()=>{}){
+  const panel=renderPanel('More Blender settings',key+':catalogue',false);parent.append(panel);
+  const editor=lazyRenderSettings(panel,initial,loader,key,onchange),toggle=panel.ontoggle;
+  panel.ontoggle=()=>{toggle();if(panel.open)editor.load();};
+  if(panel.open)editor.load();return {...editor,panel};
 }

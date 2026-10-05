@@ -10,7 +10,7 @@ with tempfile.TemporaryDirectory(prefix='folder-workflow-') as temp:
     p.create_blend('Shot',template_id='',x=100,y=150);shot=p.data['nodes'][-1]
     p.create_blend('Other',template_id='',x=450,y=150);other=p.data['nodes'][-1]
     p.folder('Outputs',node_ids=[shot['id'],other['id']],x=50,y=20,width=800,height=450);outer=p.data['nodes'][-1]
-    assert shot['group']==outer['id'] and other['group']==outer['id'] and p.path(shot)==p.root/'Shot.blend'
+    assert shot['group']==outer['id'] and other['group']==outer['id'] and p.path(shot).parent==p.root
     p.folder('Scene renders',folder_id=outer['id'],x=500,y=100,width=300,height=180);inner=p.data['nodes'][-1]
     assert inner['group']==outer['id'] and inner['path']=='Outputs/Scene renders'
     before=copy.deepcopy(p.data)

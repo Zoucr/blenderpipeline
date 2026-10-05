@@ -204,7 +204,7 @@ class FoundationTests(unittest.TestCase):
         file=self.p.root/'Shot.blend';file.write_bytes(b'first')
         node={'id':'shot','type':'blend','name':'Shot','path':'Shot.blend','scan':{'refs':[],'scenes':[{'name':'Scene','camera':'Camera','cameras':['Camera'],'start':1,'end':1,'engine':'CYCLES'}]},'render_config':{'folder_id':folder['id'],'scene':'Scene','camera':'Camera','start':1,'end':1},'x':0,'y':0}
         self.p.data['nodes'].append(node);self.p.save()
-        with patch.object(self.p,'refresh',return_value=self.p.state()),patch('blender_pipeline.rendering.queue.threading.Thread'):
+        with patch.object(self.p,'refresh',return_value=self.p.state()),patch.object(self.p,'refresh_render_sources'),patch('blender_pipeline.rendering.queue.threading.Thread'):
             self.p.queue_render('shot',overrides={'samples':8})
         item=self.p.data['render_queue'][0]
         self.assertEqual(item['effective_settings']['samples'],8)
@@ -220,6 +220,43 @@ class FoundationTests(unittest.TestCase):
         node={'id':'shot','type':'blend','name':'Shot','path':'Shot.blend','scan':{'refs':[],'signature':[0,0]},'x':0,'y':0}
         self.p.data['nodes'].append(node);self.p.save()
         with self.assertRaisesRegex(ValueError,'changed after scanning'):self.p.capture_render_inputs(node)
+
+    def test_companion_render_reuses_output_and_keeps_graph_overrides(self):
+        self.p.folder('Outputs');folder=self.p.data['nodes'][0]
+        file=self.p.root/'Shot.blend';file.write_bytes(b'saved')
+        config={'folder_id':folder['id'],'scene':'Scene','camera':'Camera','start':1,'end':20,'samples':128,'width':1280,'prefix':'graph_','advanced':{'custom':True}}
+        node={'id':'shot','type':'blend','name':'Shot','path':'Shot.blend','scan':{'refs':[],'scenes':[{'name':'Scene','camera':'Camera','cameras':['Camera'],'start':1,'end':20,'engine':'CYCLES'}]},'render_config':copy.deepcopy(config),'x':0,'y':0}
+        self.p.data['nodes'].append(node);self.p.save()
+        with patch.object(self.p,'refresh',return_value=self.p.state()),patch.object(self.p,'refresh_render_sources'),patch('blender_pipeline.rendering.queue.threading.Thread'):
+            result=self.p.companion_render('shot','Scene','Camera',7,7)
+        job=self.p.data['render_queue'][-1]
+        self.assertEqual(node['render_config'],config)
+        self.assertEqual(job['settings']['folder_id'],folder['id'])
+        self.assertEqual(job['effective_settings']['start'],7)
+        self.assertEqual(job['effective_settings']['end'],7)
+        self.assertNotIn('samples',job['settings']);self.assertNotIn('width',job['settings']);self.assertNotIn('advanced',job['settings'])
+        self.assertTrue(job['settings']['auto_prefix']);self.assertTrue(job['settings']['prefix'].endswith('_Scene_'))
+        self.assertEqual(result['companion_result']['queue_id'],job['id'])
+        self.assertEqual(len([n for n in self.p.data['nodes'] if n['type']=='folder']),1)
+
+    def test_companion_checkpoint_mismatch_creates_no_folder_or_queue(self):
+        file=self.p.root/'Shot.blend';file.write_bytes(b'changed')
+        node={'id':'shot','type':'blend','name':'Shot','path':'Shot.blend','scan':{},'x':0,'y':0}
+        self.p.data['nodes'].append(node);self.p.save()
+        with self.assertRaisesRegex(ValueError,'checkpoint'):
+            self.p.companion_render('shot','Scene','Camera',1,1,expected_hash='old-checkpoint')
+        self.assertEqual(len(self.p.data['nodes']),1);self.assertFalse(self.p.data.get('render_queue'))
+
+    def test_render_inputs_changed_between_preflight_and_queue_are_rejected(self):
+        self.p.folder('Outputs');folder=self.p.data['nodes'][0]
+        file=self.p.root/'Shot.blend';file.write_bytes(b'changed after preflight')
+        node={'id':'shot','type':'blend','name':'Shot','path':'Shot.blend','scan':{'refs':[],'scenes':[{'name':'Scene','camera':'Camera','cameras':['Camera'],'start':1,'end':1,'engine':'CYCLES'}]},'render_config':{'folder_id':folder['id'],'scene':'Scene','camera':'Camera','start':1,'end':1},'x':0,'y':0}
+        self.p.data['nodes'].append(node);self.p.save()
+        with patch.object(self.p,'refresh',return_value=self.p.state()),patch.object(self.p,'refresh_render_sources'),patch('blender_pipeline.rendering.queue.threading.Thread') as worker:
+            with self.assertRaisesRegex(ValueError,'inputs changed'):
+                self.p.queue_render('shot',expected_inputs={'Shot.blend':'before-preflight'})
+            worker.assert_not_called()
+        self.assertFalse(self.p.data.get('render_queue'))
 
 
 if __name__=='__main__':unittest.main()

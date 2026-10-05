@@ -1,11 +1,13 @@
 """Loopback HTTP adapter. Application ownership is explicit; imports start nothing."""
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import json
+import os
 from pathlib import Path
 import threading
 from urllib.parse import urlsplit
 
 from blender_pipeline.paths import WEB_DIR
+from blender_pipeline.rendering.output_browser import OutputMedia
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -54,7 +56,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(path.read_bytes())
 
     def do_POST(self):
-        lock = self.server.picker_lock if self.path == '/choose_system_path' else self.server.operation_lock
+        lock = self.server.picker_lock if self.path == '/choose_system_path' else self.server.media_lock if self.path == '/output_image' else self.server.operation_lock
         with lock:
             self.dispatch_post()
 
@@ -77,6 +79,27 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError('Revision header and request disagree.')
                 args['expected_revision'] = revision
             result = self.server.application.dispatch(self.path.strip('/'), args)
+            if isinstance(result, OutputMedia):
+                with result.path.open('rb') as stream:
+                    self.send_response(200)
+                    self.send_header('Content-Type', result.content_type)
+                    remaining = os.fstat(stream.fileno()).st_size
+                    self.send_header('Content-Length', str(remaining))
+                    self.send_header('Cache-Control', 'no-store')
+                    self.send_header('X-Content-Type-Options', 'nosniff')
+                    self.end_headers()
+                    try:
+                        while remaining:
+                            chunk = stream.read(min(128 * 1024, remaining))
+                            if not chunk:
+                                break
+                            self.wfile.write(chunk)
+                            remaining -= len(chunk)
+                    except OSError:
+                        # A disconnect or disappearing file ends this response;
+                        # headers are already sent, so never append a JSON error.
+                        self.close_connection = True
+                return
             body = json.dumps(result).encode()
             self.send_response(200)
             if isinstance(result, dict) and isinstance(result.get('project'), dict):
@@ -100,4 +123,5 @@ def create_server(app, token, asset_directory=WEB_DIR, address=('127.0.0.1', 0))
     http.asset_directory = Path(asset_directory)
     http.operation_lock = threading.RLock()
     http.picker_lock = threading.Lock()
+    http.media_lock = threading.Lock()
     return http

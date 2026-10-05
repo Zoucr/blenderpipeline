@@ -22,7 +22,7 @@ async function api(action,args={}) {
   const parameters={...args};
   if(!['projects','settings','choose_system_path','browse_directory'].includes(action))parameters.client_id=pipelineClient;
   if(!localActions.has(action)){
-    if(state.project){parameters.project_id??=state.project.id;if(!['project_view','storage_locations','read_render_settings'].includes(action))parameters.expected_revision??=state.project.revision;}
+    if(state.project){parameters.project_id??=state.project.id;if(!['project_view','storage_locations','read_render_settings','output_files','output_image'].includes(action))parameters.expected_revision??=state.project.revision;}
     parameters.request_id??=crypto.randomUUID();
   }
   const headers={'Content-Type':'application/json','X-Pipeline-Token':window.PIPELINE_TOKEN};
@@ -130,12 +130,7 @@ function labelEdit(n) {
   pick(n.id);const input=document.querySelector(`[data-id="${n.id}"] .nodeName`);if(input){input.readOnly=false;input.focus();input.select();}
 }
 function organize(n) {pick(n.id);modal('Collect scene-root objects',[{...closedField,label:'Source file is saved and closed in every Blender window',help:'Creates a normal Scene Contents collection and moves loose root objects into it. A recovery snapshot is created first. Existing collections stay in place.'}],v=>run('organize',{node_id:n.id,closed:v.closed}));}
-function renderBase() {
-  $('nodes').replaceChildren();$('edges').replaceChildren();$('welcome').hidden=!!state.project;
-  $('projectName').textContent=state.project?.name||'No project';$('projectName').title='Pipeline '+(state.build||'1.2');$('recent').replaceChildren();
-  for(const r of state.recent||[])$('recent').append(button(r.name,()=>run('load',{path:r.path})));
-  for(const n of state.project?.nodes||[]) {
-    const card=el('div',undefined,'node '+n.type+(selected===n.id?' selected':''));card.dataset.id=n.id;card.style.left=n.x+'px';card.style.top=n.y+'px';card.onclick=e=>{if(!e.target.closest('header,button,input,.port'))pick(n.id);};
+function nodeHeader(n) {
     const head=el('header'),icon=el('span',n.type==='folder'?'▣':'▧'),title=el('input');title.value=n.name;title.className='nodeName';title.title='Edit display name · disk path stays stable';title.setAttribute('aria-label','Node name');
     title.readOnly=true;title.title='Drag header to move · double-click name to edit';
     title.onpointerdown=e=>{if(!title.readOnly)e.stopPropagation();else e.preventDefault();};
@@ -144,7 +139,17 @@ function renderBase() {
     title.onblur=()=>{title.readOnly=true;if(title.value.trim()&&title.value.trim()!==n.name)run('label',{node_id:n.id,title:title.value.trim()});};
     head.append(icon,title);head.onpointerdown=e=>{if(e.button!==0||busy||!title.readOnly||e.target.closest('button'))return;e.stopPropagation();selected=n.id;if(typeof selectedConnection!=='undefined')selectedConnection=null;if(typeof selectedDataConnection!=='undefined')selectedDataConnection=null;if(typeof selection!=='undefined'&&!selection.has(n.id)){selection.clear();selection.add(n.id);}for(const c of document.querySelectorAll('.node')){c.classList.toggle('selected',c.dataset.id===n.id);if(typeof selection!=='undefined')c.classList.toggle('multiSelected',selection.has(c.dataset.id)&&selection.size>1);}inspect();if(typeof paintNavigator==='function')paintNavigator();move={type:'node',id:n.id,x:e.clientX,y:e.clientY,ox:n.x,oy:n.y};head.setPointerCapture(e.pointerId);};
     head.ondblclick=e=>{if(e.target.closest('button'))return;e.stopPropagation();move=null;labelEdit(n);};
-    head.onpointermove=e=>drag(e);head.onpointerup=()=>{move=null;drawEdges();persist();};card.append(head);
+    head.onpointermove=e=>drag(e);head.onpointerup=()=>{move=null;drawEdges();persist();};return head;
+}
+function renderBase() {
+  $('appVersion').textContent=state.build?'v'+state.build:'';$('appVersion').hidden=!state.build;
+  $('nodes').replaceChildren();$('edges').replaceChildren();$('welcome').hidden=!!state.project;
+  $('projectName').textContent=state.project?.name||'No project';$('projectName').title='Pipeline '+(state.build||'1.2');$('recent').replaceChildren();
+  for(const r of state.recent||[])$('recent').append(button(r.name,()=>run('load',{path:r.path})));
+  for(const n of state.project?.nodes||[]) {
+    if(!['blend','folder'].includes(n.type))continue;
+    const card=el('div',undefined,'node '+n.type+(selected===n.id?' selected':''));card.dataset.id=n.id;card.style.left=n.x+'px';card.style.top=n.y+'px';card.onclick=e=>{if(!e.target.closest('header,button,input,.port'))pick(n.id);};
+    const head=nodeHeader(n);card.append(head);
     const body=el('div',undefined,'body');body.append(el('div',n.path,'path'));const row=el('div',undefined,'row');
     row.append(button(n.type==='folder'?'Open Folder':'Open',()=>run('launch',{node_id:n.id})));
     if(n.type==='blend')row.append(button('Snapshot',()=>run('snapshot',{node_id:n.id}),'Snapshot the last saved file'),button('↻',()=>{pick(n.id);run('refresh',{node_id:n.id});},'Refresh this node only'));
@@ -199,6 +204,7 @@ function inspectBase() {
     if(state.root)pane.append(el('p',state.root));pane.append(button('Blender Settings',()=>modal('Blender executable',[{key:'blender',label:'Full executable path',value:state.blender,required:true}],v=>run('settings',v))));
     pane.append(el('p','Auto-refresh checks saved files every few seconds. Unsaved Blender edits are not accessible.'));return;
   }
+  if(!['blend','folder'].includes(n.type))return;
   pane.append(el('p',state.root+'/'+n.path));pane.append(el('p','Header names are display labels. Disk paths stay stable.'));
   if(n.type==='folder'){pane.append(button('＋ Blend File here',()=>quickCreate()));return;}
   pane.append(el('p',problem(n)));pane.append(button('Open',()=>run('launch',{node_id:n.id})),button('↻ Refresh node',()=>run('refresh',{node_id:n.id})),button('Snapshot',()=>run('snapshot',{node_id:n.id})));
@@ -229,16 +235,10 @@ $('workspace').onpointerup=()=>{if(move?.type==='pan'){move=null;persist();}};
 document.addEventListener('pointerup',e=>{
   if(!wire)return;const element=document.elementFromPoint(e.clientX,e.clientY),target=element?.closest('[data-target]')?.dataset.target||element?.closest('.node.blend')?.dataset.id;
   const current=wire;wire=null;$('wirePreview')?.remove();
-  if(target){if(window.pipelineLinkDialog)window.pipelineLinkDialog(current.source,target,current.collection);else modal('Link '+current.collection,[closedField],v=>run('link',{source_id:current.source,target_id:target,collection:current.collection,closed:v.closed}));}else status('Link cancelled');
+  if(window.pipelineExportDrop?.(current.source,element,current.collection?{kind:'collections',name:current.collection}:undefined))return;
+  if(target){if(window.pipelineLinkDialog)window.pipelineLinkDialog(current.source,target,current.collection);else modal('Link '+current.collection,[closedField],v=>run('link',{source_id:current.source,target_id:target,collection:current.collection,closed:v.closed}));}else if(window.pipelineOfferLinkedFile&&window.pipelineOfferLinkedFile(current.source,element,e,current.collection?{kind:'collections',name:current.collection}:undefined))return;else status('Link cancelled');
 });
 $('workspace').ondblclick=e=>{if(emptyCanvas(e)&&state.project)quickCreate(worldPoint(e.clientX,e.clientY));};
-$('workspace').oncontextmenu=e=>{
-  e.preventDefault();if(!state.project||busy)return;const menu=$('contextMenu');menu.replaceChildren();const card=e.target.closest('.node');
-  if(card){const n=state.project.nodes.find(n=>n.id===card.dataset.id);pick(n.id);if(n.type==='blend')menu.append(button('Refresh this node',()=>run('refresh',{node_id:n.id})),button('Snapshot saved file',()=>run('snapshot',{node_id:n.id})));menu.append(button('Edit name',()=>labelEdit(n)));}
-  else {const p=worldPoint(e.clientX,e.clientY);menu.append(button('Add Blend File here',()=>quickCreate(p)));}
-  menu.style.left=Math.min(e.clientX,innerWidth-200)+'px';menu.style.top=Math.min(e.clientY,innerHeight-160)+'px';menu.hidden=false;
-};
-document.addEventListener('click',e=>{if(!e.target.closest('#contextMenu')||e.target.closest('#contextMenu button'))$('contextMenu').hidden=true;},true);
 $('workspace').addEventListener('wheel',e=>{e.preventDefault();const bounds=$('workspace').getBoundingClientRect(),x=e.clientX-bounds.left,y=e.clientY-bounds.top,old=view.zoom;view.zoom=Math.max(.3,Math.min(2,old*Math.exp(-e.deltaY*.001)));view.x=x-(x-view.x)*view.zoom/old;view.y=y-(y-view.y)*view.zoom/old;transform();persist();},{passive:false});
 function reveal(n) {const x=n.x*view.zoom+view.x,y=n.y*view.zoom+view.y;if(x<0||y<0||x+238*view.zoom>$('workspace').clientWidth||y+200*view.zoom>$('workspace').clientHeight){view.x=$('workspace').clientWidth/2-(n.x+119)*view.zoom;view.y=$('workspace').clientHeight/2-(n.y+100)*view.zoom;transform();persist();}}
 $('frame').onclick=()=>{const nodes=state.project?.nodes;if(!nodes?.length)return;const minX=Math.min(...nodes.map(n=>n.x)),minY=Math.min(...nodes.map(n=>n.y)),maxX=Math.max(...nodes.map(n=>n.x+250)),maxY=Math.max(...nodes.map(n=>n.y+document.querySelector(`[data-id="${n.id}"]`).offsetHeight));view.zoom=Math.min(1,($('workspace').clientWidth-80)/(maxX-minX),($('workspace').clientHeight-80)/(maxY-minY));view.x=40-minX*view.zoom;view.y=40-minY*view.zoom;transform();persist();};
@@ -246,12 +246,12 @@ $('search').oninput=e=>{const value=e.target.value.toLowerCase(),n=state.project
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('contextMenu').hidden=true;wire=null;$('wirePreview')?.remove();}if(e.key==='F5'&&!document.activeElement?.matches('input,textarea,select,[contenteditable=true]')&&!$('commandPalette')?.open&&state.project?.nodes.find(n=>n.id===selected)?.type==='blend'&&!$('dialog').open){e.preventDefault();run('refresh',{node_id:selected});}});
 PipelineUI.background('saved-file-refresh',3000,async()=>{
   const active=document.activeElement;
-  if((window.pipelineBusy&&window.pipelineBusy())||busy||move||wire||!state.project||$('dialog').open||(active?.tagName==='INPUT'&&active.type!=='checkbox'&&!active.readOnly))return;
+  if((window.pipelineBusy&&window.pipelineBusy())||busy||move||wire||!state.project||$('dialog').open||active?.matches('textarea,select')||(active?.tagName==='INPUT'&&active.type!=='checkbox'&&!active.readOnly))return;
   try {
     const latest=await api('state');if(latest.project?.id!==state.project.id)return;
     state.files=latest.files;state.open=latest.open;
     for(const n of state.project.nodes.filter(n=>n.type==='blend')){const label=document.querySelector(`[data-id="${n.id}"] .nodeStatus`);if(label)label.textContent=problem(n);}
-    if($('autoRefresh').checked){for(const [id,file] of Object.entries(latest.files||{})){const signature=JSON.stringify([file.mtime,file.size]);const before=observed.get(id);observed.set(id,signature);if(file.changed&&!file.missing&&before===signature){await run('refresh',{node_id:id});break;}}}
+    if($('autoRefresh').checked){for(const [id,file] of Object.entries(latest.files||{})){const signature=JSON.stringify([file.mtime,file.size]);const before=observed.get(id);observed.set(id,signature);if(file.changed&&!file.missing&&!latest.health?.nodes?.[id]?.dirty&&before===signature){await run('refresh',{node_id:id});break;}}}
   }catch(e){status('Local server unavailable. Restart Launch.cmd if needed.');}
 });
 

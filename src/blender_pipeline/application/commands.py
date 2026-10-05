@@ -10,6 +10,7 @@ import os
 from blender_pipeline.project.model import uid, stamp
 from blender_pipeline.application.operations import OperationContracts, OperationJournal
 from blender_pipeline.storage.file_references import FileResolver
+from blender_pipeline.rendering.output_browser import OutputBrowser
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,16 @@ COMMANDS = {
     'create': Command('create', queued=True, direct=True),
     'load': Command('load', queued=True, direct=True),
     'folder': Command('folder', queued=True, direct=True),
+    'frame': Command('frame', queued=True, direct=False),
+    'export_node': Command('export_node', queued=True, direct=False),
+    'export_config': Command('export_config', queued=True, direct=False),
+    'export_start': Command('export_start', queued=True, direct=False),
+    'export_open': Command('export_open', queued=True, direct=False),
+    'render_node': Command('render_node', queued=True, direct=False),
+    'render_node_config': Command('render_node_config', queued=True, direct=False),
+    'queue_render_node': Command('queue_render_node', queued=True, direct=False),
+    'remove_graph_node': Command('remove_graph_node', queued=True, direct=False),
+    'restore_graph_node': Command('restore_graph_node', queued=True, direct=False),
     'blend': Command('create_blend', queued=True, direct=True),
     'import': Command('import_blend', queued=True, direct=True),
     'refresh': Command('refresh', queued=True, direct=True),
@@ -32,6 +43,8 @@ COMMANDS = {
     'organize': Command('organize', queued=True, direct=True),
     'label': Command('label', queued=True, direct=True),
     'duplicate': Command('duplicate', queued=True, direct=True),
+    'paste_nodes': Command('paste_nodes', queued=True, direct=False),
+    'node_colors': Command('node_colors', queued=True, direct=False),
     'snapshot_note': Command('snapshot_note', queued=True, direct=True),
     'graph_edit': Command('graph_edit', queued=True, direct=True),
     'adopt': Command('adopt', queued=True, direct=True),
@@ -59,6 +72,7 @@ COMMANDS = {
     'save_app_startup': Command('save_app_startup', queued=True, direct=False),
     'queue_render': Command('queue_render', queued=True, direct=False),
     'queue_batch': Command('queue_batch', queued=True, direct=False),
+    'locate_render_image': Command('locate_render_image', queued=True, direct=False),
     'batch_settings': Command('batch_settings', queued=True, direct=False),
     'render_delete': Command('render_delete', queued=True, direct=False),
     'preflight_report': Command('preflight_report', queued=True, direct=False),
@@ -78,6 +92,7 @@ class Application:
         self.project_library = ProjectLibrary(model, tasks)
         self.contracts=OperationContracts(model)
         self.journal=OperationJournal(self.settings_directory)
+        self.outputs=OutputBrowser(model,self.settings_directory)
         if hasattr(model,'resolver'):model.resolver=FileResolver(self.settings_directory)
         if hasattr(tasks,'configure_journal'):tasks.configure_journal(self.journal)
 
@@ -133,6 +148,13 @@ class Application:
             with self.model.lock:
                 self.contracts.validate(context)
                 return self.model.read_render_settings(**parameters)
+        if action in {'output_files','output_image'}:
+            parameters,context=self.contracts.context(args,action)
+            with self.model.lock:
+                self.contracts.validate(context)
+                version=self.outputs.version(parameters['run_id'])
+            if action=='output_files':return self.outputs.files(version)
+            return self.outputs.preview(version,parameters['path'])
         if action == 'ui_preferences':
             return settings.preferences(args)
         if action == 'state':

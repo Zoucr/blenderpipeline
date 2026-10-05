@@ -1,7 +1,7 @@
 """Discover and apply render RNA values without evaluating arbitrary RNA paths."""
 import ast, json, math, re
 
-COMMON={('render','resolution_x'):'width',('render','resolution_y'):'height',('render','resolution_percentage'):'percentage',('render','engine'):'engine',('cycles','samples'):'samples',('cycles','use_denoising'):'denoise',('eevee','taa_render_samples'):'samples',('scene','frame_start'):'start',('scene','frame_end'):'end',('image','file_format'):'format'}
+COMMON={('render','resolution_x'):'width',('render','resolution_y'):'height',('render','resolution_percentage'):'percentage',('render','engine'):'engine',('cycles','samples'):'samples',('cycles','use_denoising'):'denoise',('eevee','taa_render_samples'):'samples',('scene','frame_start'):'start',('scene','frame_end'):'end',('scene','frame_step'):'step',('image','file_format'):'format'}
 MANAGED={'filepath','file_extension','use_file_extension','use_placeholder','use_render_cache','media_type'}
 
 def enum_options(obj,prop,value):

@@ -14,7 +14,5 @@ PipelineUI.use('paintTasks','open-files',1100,function(next){next();paintOpenFil
 PipelineUI.use('render','open-files',1101,function(next){if(selected&&!state.project?.nodes.some(n=>n.id===selected)){selected=null;selectedConnection=null;selectedDataConnection=null;selection.clear();}next();paintOpenFiles();});
 
 PipelineUI.use('run','protect-open-files',1102,function(next, action,args={}){const writes=['archive_blend','restore','relocate','adopt','organize','link','link_data','link_batch','prepare_materials','refresh_dependencies'];if(writes.includes(action)){const n=state.project?.nodes.find(n=>n.id===(args.target_id||args.node_id));if(n&&reportedOpen(n)){error('Close '+n.name+' in Blender before changing its saved file. The node is marked open.');return Promise.resolve();}}return next(action,args);});
-const sessionMenu=nodeMenu;
-nodeMenu=function(n,anchor){sessionMenu(n,anchor);if(reportedOpen(n)){const menu=$('contextMenu');for(const b of menu.querySelectorAll('button'))if(/Delete file|Move.*file|Locate.*file/i.test(b.textContent)){b.disabled=true;b.title='Close this file in Blender first.';}menu.append(muted('Open in Blender · saved-file edits are protected.'));}};
 paintOpenFiles();
 

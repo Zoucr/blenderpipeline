@@ -2,16 +2,6 @@
 const libraryDialog=el('dialog');libraryDialog.id='projectLibrary';document.body.append(libraryDialog);
 projectList.insertBefore(button('Manage projects',openProjectLibrary),recentList);
 let libraryQuery='',librarySort='recent',removedProject=null;
-const archiveMenu=nodeMenu;
-nodeMenu=function(n,anchor){
-  archiveMenu(n,anchor);
-  if(n.type==='blend'&&!n.external)$('contextMenu').append(button('Delete file → archive',()=>{
-    modal('Archive '+n.name+'?',[{key:'closed',type:'checkbox',required:true,label:'I saved and closed this file in every Blender window'}],v=>run('archive_blend',{node_id:n.id,...v}));
-    $('fields').append(muted('Delete this node and move its working file into the project archive? You can restore it later from Project → Archived files. Snapshot history is kept.'));
-    $('submit').textContent='Archive file';
-  }));
-  polishInterface();
-};
 projectList.insertBefore(button('Archived files',openArchivedFiles),recentList);
 function openArchivedFiles(){modal('Archived files',[],()=>{});$('submit').textContent='Close';const records=state.project?.archived_files||[];if(!records.length){$('fields').append(muted('No archived files in this project.'));return;}$('fields').append(muted('Restores the file to its original path with its node and snapshot history. The original path must be free.'));for(const record of [...records].reverse()){const row=section(record.node.name,el('p',record.node.path,'uxPath'),muted(new Date(record.archived_at).toLocaleString()),button('Restore file',()=>{$('dialog').close();run('restore_archived',{archive_id:record.id});}));$('fields').append(row);}}
 async function openProjectLibrary(){

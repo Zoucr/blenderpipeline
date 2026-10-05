@@ -24,8 +24,16 @@ with tempfile.TemporaryDirectory(prefix='companion-test-') as directory:
     limit=time.monotonic()+60
     while model.render_busy() and time.monotonic()<limit:time.sleep(.2)
     assert model.data['render_queue'][-1]['status']=='Complete',model.data['render_queue']
-    assert list((model.root/model.data['renders'][-1]['output']).glob('*.png'))
+    assert len(model.data['renders'])==2
+    first,second=model.data['renders']
+    assert first['output']!=second['output'] and first['number']==1 and second['number']==2
+    assert len(list((model.root/first['output']).glob('*.png')))==1
+    assert len(list((model.root/second['output']).glob('*.png')))==2
+    for run in model.data['renders']:
+        assert run['actual_settings']['width']==64 and run['actual_settings']['samples']==1,run['actual_settings']
+        assert run['config']['auto_prefix'] and run['config']['prefix'].endswith('_Scene_')
+        assert run['config']['percentage'] is None
     working=next(n for n in model.data['nodes'] if n['name']=='Working')
-    assert len(working['snapshots'])>=5 and len(working['scan']['instances'])>=2 and working['scan']['data_links']
+    assert len(working['snapshots'])>=7 and len(working['scan']['instances'])>=2 and working['scan']['data_links']
     http.shutdown();http.server_close();tasks.pool.shutdown()
-print('PASS: actual Blender companion end-to-end and completed sequential CPU render')
+print('PASS: actual Blender companion end-to-end, checkpointed current-frame and animation CPU renders, isolated versions and inherited saved settings')

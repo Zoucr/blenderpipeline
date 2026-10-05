@@ -47,6 +47,8 @@ The fast command runs Python contracts, syntax/lifecycle checks for every produc
 
 Every command receives disposable machine settings. Blender integration fixtures generate their own `.blend` files and do not depend on a developer's Desktop, old demos or previous test runs. A failure stops the suite.
 
+Checks run from disposable working directories with absolute script paths. Background Blender operations and render workers also own temporary working directories, cleaned after success, failure or cancellation. Do not launch background Blender with the source or a project as its working directory: incidental thumbnail caches can otherwise appear there, especially when Windows profile lookup is unavailable. Inputs, outputs and scripts must use explicit absolute paths.
+
 For one integration check, set `PYTHONPATH` to the checkout's `src` directory and `PIPELINE_DATA_DIR` to a disposable directory, then run the desired script in `tests/integration/`. Optionally set `BLENDER_EXECUTABLE`.
 
 ## Package the companion

@@ -72,7 +72,7 @@ class Tasks:
                 self.record(job)
         except Exception as exc:
             # A rejected precondition must never write a node error to another project.
-            if job['node_id'] and self.model.data and job.get('project_id')==self.model.data['id'] and getattr(exc,'code',None) not in {'revision_conflict','project_context_changed'}:
+            if job['node_id'] and self.model.data and job.get('project_id')==self.model.data['id'] and getattr(exc,'code',None) not in {'revision_conflict','project_context_changed','render_image_warnings'}:
                 with self.model.lock:
                     node=next((n for n in self.model.data['nodes'] if n['id']==job['node_id']),None)
                     if node:
@@ -81,5 +81,6 @@ class Tasks:
                         except Exception as save_error:node['last_error']['message']+='; could not persist error: '+str(save_error)
             with self.lock:
                 job.update(status='Failed',error=str(exc),finished=stamp(),error_code=getattr(exc,'code','operation_failed'))
+                if getattr(exc,'dependency_warnings',None):job['dependency_warnings']=copy.deepcopy(exc.dependency_warnings)
                 self.record(job)
                 self.cached=copy.deepcopy(self.model.state())

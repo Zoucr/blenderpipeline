@@ -1,6 +1,10 @@
 """Flat, readable, collision-safe names on the frozen compositor copy."""
 import re
 from pathlib import Path
+try:
+    from .render_resources import blender_file_path
+except ImportError:
+    from render_resources import blender_file_path
 
 def clean(value):
     value=re.sub(r'[<>:"/\\|?*#{}\x00-\x1f\s]+','_',str(value)).strip(' ._')[:90]
@@ -33,7 +37,7 @@ def route(tree,output,prefix):
                 node.use_file_extension=True
                 multilayer=node.format.file_format=='OPEN_EXR_MULTILAYER' or getattr(node.format,'media_type','')=='MULTI_LAYER_IMAGE'
                 if hasattr(node,'directory'):
-                    node.directory=str(directory)
+                    node.directory=blender_file_path(directory,extra=200)
                     if multilayer:
                         title=unique(label(node));node.file_name=prefix+title+'_'
                         manifest.append(dict(node=node.label or node.name,pass_name=title,prefix=node.file_name,format=node.format.file_format,multilayer=True,layers=[i.name for i in node.file_output_items]))
@@ -46,10 +50,10 @@ def route(tree,output,prefix):
                             manifest.append(dict(node=node.label or node.name,pass_name=title,prefix=prefix+title+'_',format=fmt.file_format,multilayer=False))
                 else:
                     if multilayer:
-                        title=unique(label(node));node.base_path=str(directory/(prefix+title+'_'))
+                        title=unique(label(node));node.base_path=blender_file_path(directory/(prefix+title+'_'),extra=16)
                         manifest.append(dict(node=node.label or node.name,pass_name=title,prefix=prefix+title+'_',format=node.format.file_format,multilayer=True))
                     else:
-                        node.base_path=str(directory)
+                        node.base_path=blender_file_path(directory,extra=200)
                         for index,item in enumerate(node.file_slots):
                             socket=node.inputs[index] if index<len(node.inputs) else None
                             title=unique(label(node,item,socket));item.path=prefix+title+'_'

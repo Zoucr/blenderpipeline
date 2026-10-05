@@ -10,30 +10,30 @@ const ProjectTree=(function(){
       const tree=navigator.querySelector('.uxTree');tree.replaceChildren();
       const project=state.project,query=controls.get('search').value.trim().toLowerCase(),nodes=project.nodes.filter(n=>!n.hidden),lookup=new Map(nodes.map(n=>[n.id,n])),children=new Map(),parents=new Map();
       if(!navigatorFolds.has(project.id))navigatorFolds.set(project.id,new Set());const folded=navigatorFolds.get(project.id);
-      for(const n of nodes){const parent=lookup.get(n.group),key=parent?.type==='folder'&&parent.id!==n.id?parent.id:null;parents.set(n.id,key);if(!children.has(key))children.set(key,[]);children.get(key).push(n);}
-      for(const siblings of children.values())siblings.sort((a,b)=>(b.type==='folder')-(a.type==='folder')||a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));
+      for(const n of nodes){const parent=lookup.get(n.group),key=['folder','frame'].includes(parent?.type)&&parent.id!==n.id?parent.id:null;parents.set(n.id,key);if(!children.has(key))children.set(key,[]);children.get(key).push(n);}
+      for(const siblings of children.values())siblings.sort((a,b)=>(['folder','frame'].includes(b.type))-(['folder','frame'].includes(a.type))||a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));
       function ancestors(id){const result=[],seen=new Set([id]);for(let p=parents.get(id);p&&!seen.has(p);p=parents.get(p)){seen.add(p);result.push(p);}return result;}
       const context=project.id+':'+selected;
       if(context!==navigatorSelectionContext){ancestors(selected).forEach(id=>folded.delete(id));navigatorSelectionContext=context;}
       const included=new Set();
       function includeChildren(id){const pending=[id],seen=new Set();while(pending.length){const next=pending.pop();if(seen.has(next))continue;seen.add(next);included.add(next);for(const child of children.get(next)||[])pending.push(child.id);}}
       if(query)for(const n of nodes)if((n.name+' '+n.path+' '+(n.notes||'')).toLowerCase().includes(query)){
-        if(n.type==='folder')includeChildren(n.id);else included.add(n.id);ancestors(n.id).forEach(id=>included.add(id));
+        if(['folder','frame'].includes(n.type))includeChildren(n.id);else included.add(n.id);ancestors(n.id).forEach(id=>included.add(id));
       }
       function focusRow(id){[...tree.querySelectorAll('.uxFileRow')].find(row=>row.dataset.nodeId===id)?.focus({preventScroll:true});}
       function toggleFolder(id){if(query)return;folded.has(id)?folded.delete(id):folded.add(id);repaint();focusRow(id);}
       const root=el('ul',undefined,'uxTreeList'),shown=new Set();root.setAttribute('aria-label','Project node folders');tree.append(root);
       function add(n,list){
         if(shown.has(n.id)||query&&!included.has(n.id))return;shown.add(n.id);
-        const item=el('li',undefined,'uxTreeItem'),line=el('div',undefined,'uxTreeLine'),kids=children.get(n.id)||[],folder=n.type==='folder',open=!!query||!folded.has(n.id);line.dataset.nodeId=n.id;
+        const item=el('li',undefined,'uxTreeItem'),line=el('div',undefined,'uxTreeLine'),kids=children.get(n.id)||[],folder=['folder','frame'].includes(n.type),open=!!query||!folded.has(n.id);line.dataset.nodeId=n.id;
         if(folder&&kids.length){const toggle=button(open?'▾':'▸',()=>toggleFolder(n.id));toggle.className='uxTreeToggle';toggle.setAttribute('aria-label',(open?'Collapse ':'Expand ')+n.name);toggle.setAttribute('aria-expanded',String(open));toggle.title=query?'Search shows matching branches':(open?'Collapse folder list':'Expand folder list');toggle.disabled=!!query;line.append(toggle);}else line.append(el('span',undefined,'uxTreeToggleSpace'));
         const row=button('',e=>{ancestors(n.id).forEach(id=>folded.delete(id));if(e.shiftKey||e.ctrlKey||e.metaKey){pick(n.id,true);repaint();}else focusNode(n);});row.className='uxFileRow'+(selected===n.id?' active':'')+(selection.has(n.id)&&selection.size>1?' multiSelected':'');row.dataset.nodeId=n.id;row.dataset.color=n.color||'default';row.dataset.kind=n.type;row.setAttribute('aria-label',n.name);row.setAttribute('aria-current',selected===n.id?'true':'false');
-        const trail=ancestors(n.id).reverse().map(id=>lookup.get(id).name);row.title='Graph: '+[project.name,...trail,n.name].join(' / ')+'\nDisk: '+n.path;
+        const trail=ancestors(n.id).reverse().map(id=>lookup.get(id).name);row.title='Graph: '+[project.name,...trail,n.name].join(' / ')+(n.path?'\nDisk: '+n.path:'\nGraph-only '+n.type+' node');
         // Folder headers currently use their fixed folder theme, independent of file colors.
         if(folder)row.dataset.color='default';
-        const swatch=el('span',undefined,'uxTreeColor');swatch.setAttribute('aria-hidden','true');const icon=el('span',undefined,'uxFileIcon');icon.append(blenderIcon(folder?'file_folder':'file_blend'));row.append(swatch,icon,el('span',n.name,'uxTreeName'));
+        const swatch=el('span',undefined,'uxTreeColor');swatch.setAttribute('aria-hidden','true');const icon=el('span',undefined,'uxFileIcon');icon.append(blenderIcon(n.type==='frame'?'nodetree':n.type==='render'?'render_animation':n.type==='export'?'file_archive':folder?'file_folder':'file_blend'));row.append(swatch,icon,el('span',n.name,'uxTreeName'));
         if(folder){const count=el('span',String(kids.length),'uxTreeCount');count.title=`${kids.filter(c=>c.type==='folder').length} folders · ${kids.filter(c=>c.type==='blend').length} files directly inside`;row.append(count);}
-        else if(problem(n)!=='Ready'){const alert=el('span','•','uxFileAlert');alert.title=problem(n);row.append(alert);}
+        else if(n.type==='blend'&&problem(n)!=='Ready'){const alert=el('span','•','uxFileAlert');alert.title=problem(n);row.append(alert);}
         row.onkeydown=e=>{
           if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const rows=[...tree.querySelectorAll('.uxFileRow')],index=rows.indexOf(row);
           if(e.key==='ArrowLeft'){if(folder&&kids.length&&open&&!query)toggleFolder(n.id);else focusRow(parents.get(n.id));}

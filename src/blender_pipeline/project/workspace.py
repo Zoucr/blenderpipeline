@@ -1,5 +1,6 @@
 """Workspace editing, portable archives and recorded local rendering."""
-import copy, json, os, re, shutil, subprocess, tempfile, threading, zipfile
+import copy, json, os, re, shutil, subprocess, tempfile, threading, time, zipfile
+from datetime import datetime
 from pathlib import Path
 from blender_pipeline.project.model import Pipeline as BasePipeline, META, uid, stamp, digest, name, atomic_json
 from blender_pipeline.paths import BLENDER_SCRIPTS_DIR
@@ -9,8 +10,20 @@ from blender_pipeline.project.templates import Templates
 from blender_pipeline.project.external_libraries import ExternalLibraries
 from blender_pipeline.project.folders import FolderWorkflow,dated_prefix
 from blender_pipeline.rendering.settings import RenderManagement
+from blender_pipeline.project.graph_nodes import GraphNodes
+from blender_pipeline.exporting.service import ExportWorkflow
+from blender_pipeline.blender.export_settings import EXPORT_SETTINGS
+from blender_pipeline.rendering.graph import RenderGraph
+from blender_pipeline.project.dependencies import dependency_health, file_signature
+from blender_pipeline.project.node_editing import NodeEditing
+from blender_pipeline.rendering.inputs import warning_keys
+from blender_pipeline.rendering.images import image_identity, freeze_images
+from blender_pipeline.rendering.progress import read_markers
+from blender_pipeline.rendering.worker import RenderWorker
+from blender_pipeline.rendering.environment import render_environment
+from blender_pipeline.adapters.background_process import start_background_process, cleanup_background_process
 
-class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,RenderQueue,BasePipeline):
+class Pipeline(NodeEditing,RenderGraph,ExportWorkflow,GraphNodes,RenderManagement,FolderWorkflow,ExternalLibraries,Templates,RenderQueue,BasePipeline):
     def __init__(self, repository=None, runtime=None, desktop=None, resolver=None, data_directory=None):
         super().__init__(repository=repository, runtime=runtime, desktop=desktop, resolver=resolver, data_directory=data_directory)
         self.lock=threading.RLock()
@@ -18,6 +31,19 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
         self.render_cancelled=set()
         self.companion=None
         self.global_template_config=self.settings_directory/'startup-default.json'
+    def stop_render_workers(self):
+        """Stop owned background workers when the local application's console closes."""
+        with self.lock:
+            self._render_shutdown=True
+            for item in self.data.get('render_queue',[]) if self.data else []:
+                if item['status'] in {'Queued','Preparing','Rendering'}:
+                    item.update(status='Cancelled',error='Local application closed.',finished=stamp())
+            for identity,process in list(self.render_processes.items()):
+                self.render_cancelled.add(identity)
+                if process.poll() is None:process.terminate()
+            worker=getattr(self,'_render_worker',None)
+            if worker:worker.stop()
+            if self.data:self.save()
     def save(self):
         with self.lock: super().save()
     def archive_blend(self,node_id,closed=False):
@@ -53,10 +79,11 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
         if not record:raise ValueError('Archived file not found.')
         node=copy.deepcopy(record['node']);target=self.path(node);source=(self.root/record['path']).resolve()
         if not source.is_relative_to((self.root/META/'archive').resolve()):raise ValueError('Invalid archive path.')
-        if target.exists() or any(n['id']==node['id'] or n['path']==node['path'] for n in self.data['nodes']):raise ValueError('The original path is occupied. Move or rename the replacement before restoring.')
+        if target.exists() or any(n['id']==node['id'] or n.get('path')==node['path'] for n in self.data['nodes']):raise ValueError('The original path is occupied. Move or rename the replacement before restoring.')
         if not source.is_file() or digest(source)!=record['hash']:raise ValueError('Archived file is missing or changed; restore stopped.')
         target.parent.mkdir(parents=True,exist_ok=True);before=copy.deepcopy(self.data);os.replace(source,target)
         try:
+            if not any(n['id']==node.get('group') and n['type'] in {'folder','frame'} for n in self.data['nodes']):node['group']=None
             node['hidden']=False;node.pop('last_error',None);self.data['nodes'].append(node)
             self.data['archived_files']=[r for r in self.data['archived_files'] if r['id']!=archive_id]
             self.inspect(node);self.save()
@@ -73,6 +100,7 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
         return self.state()
     def state(self):
         result=super().state();result['build']=__version__
+        result['export_settings']=EXPORT_SETTINGS
         try:result['app_startup']=json.loads(self.global_template_config.read_text(encoding='utf-8'))
         except (OSError,ValueError):result['app_startup']=None
         if self.companion:
@@ -103,6 +131,8 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
                     if source and source.get('scan',{}).get('hash')!=node.get('dependency_hashes',{}).get(source['id']):updates.append(source['id'])
                 if updates:result['updates'][node['id']]=updates
         if self.data:
+            result['health']=dependency_health(self,result.get('files',{}))
+            result['render_targets']=[{k:n[k] for k in ('id','source_id','operation_id','target_id','name','render_config') if k in n} for n in self.render_targets()]
             # Large RNA catalogues are served only when a settings browser requests them.
             result['project']['nodes']=[{**n,'scan':{**n.get('scan',{}),'scenes':[{**{k:v for k,v in s.items() if k!='advanced_settings'},'advanced_setting_count':len(s.get('advanced_settings',[]))} for s in n.get('scan',{}).get('scenes',[])]}} if n['type']=='blend' else n for n in result['project']['nodes']]
         return result
@@ -116,15 +146,22 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
                 run.update(status='Interrupted',error='The previous application session ended. Its render process may still need to be stopped manually.')
         self.save();return self.state()
     def inspect(self,node):
+        previous=node.get('scan',{})
+        baseline=copy.deepcopy(node.get('dependency_hashes',{}))
         super().inspect(node)
         if not node.get('scan',{}).get('error'):
+            unchanged=previous.get('hash') and previous['hash']==node['scan'].get('hash')
             node['dependency_hashes']={}
             for source in self.data.get('nodes',[]) if self.data else []:
                 if source['type']!='blend':continue
                 try:
                     source_path=self.path(source)
-                    if any(r['kind']=='Library' and os.path.normcase(str(Path(r['path']).resolve()))==os.path.normcase(str(source_path)) for r in node['scan']['refs']):node['dependency_hashes'][source['id']]=digest(source_path)
+                    if any(r['kind']=='Library' and os.path.normcase(str(Path(r['path']).resolve()))==os.path.normcase(str(source_path)) for r in node['scan']['refs']):node['dependency_hashes'][source['id']]=baseline[source['id']] if unchanged and source['id'] in baseline else digest(source_path)
                 except (OSError,ValueError):pass
+            if previous.get('hash') and not unchanged:
+                before={(d['kind'],d['name']) for d in previous.get('datablocks',[])}
+                after={(d['kind'],d['name']) for d in node['scan'].get('datablocks',[])}
+                node['content_changes']={'added':[{'kind':k,'name':v} for k,v in sorted(after-before)][:20],'removed':[{'kind':k,'name':v} for k,v in sorted(before-after)][:20],'at':stamp(),'hash':node['scan'].get('hash')}
     def create_blend(self,title=None,folder_id=None,template=None,x=None,y=None,template_id=None):
         chosen=template_id if template_id is not None else self.data.get('default_template','')
         if template:chosen=''
@@ -133,12 +170,21 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
         if chosen=='__factory__':chosen=''
         if chosen and not template:
             _,path=self.template_entry(chosen);template=str(path)
-        result=super().create_blend(title,folder_id,template,x,y)
+        physical=self.physical_folder(folder_id)
+        parent=self.path(self.node(physical)) if physical else self.root
+        display_name=self.new_blend_name(title,parent)
+        naming={'date':datetime.now().strftime('%y%m%d'),'version':1}
+        result=super().create_blend(self.blend_filename(display_name,naming),physical,template,x,y)
+        self.data['nodes'][-1].update(name=display_name,file_naming=naming)
         self.data['nodes'][-1]['group']=folder_id
         if chosen:self.data['nodes'][-1]['startup_template']=chosen
         self.save();return self.state()
     def import_blend(self,*args,**kwargs):
-        folder=kwargs.get('folder_id',args[1] if len(args)>1 else None);result=super().import_blend(*args,**kwargs)
+        folder=kwargs.get('folder_id',args[1] if len(args)>1 else None)
+        args=list(args)
+        if len(args)>1:args[1]=self.physical_folder(folder)
+        else:kwargs['folder_id']=self.physical_folder(folder)
+        result=super().import_blend(*args,**kwargs)
         self.data['nodes'][-1]['group']=folder;self.save();return self.state()
     def folder(self,title=None,folder_id=None,x=None,y=None,node_ids=None,width=650,height=420):
         members=[self.node(i) for i in dict.fromkeys(node_ids or [])]
@@ -150,31 +196,16 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
             if node['id'] in {n['id'] for n in members}:node['group']=frame_id
         self.validate_groups(provisional)
         if not title:
-            parent=self.path(self.node(folder_id)) if folder_id else self.root;number=1
+            physical=self.physical_folder(folder_id)
+            parent=self.path(self.node(physical)) if physical else self.root;number=1
             while (parent/f'Folder {number:03}').exists():number+=1
             title=f'Folder {number:03}'
-        super().folder(title,folder_id,x,y);frame=self.data['nodes'][-1]
+        super().folder(title,self.physical_folder(folder_id),x,y);frame=self.data['nodes'][-1]
         frame.update(width=width,height=height,collapsed=False,group=folder_id)
         for node in members:node['group']=frame['id']
         self.validate_groups(self.data['nodes'])
         self.fit_frames()
         self.save();return self.state()
-    def duplicate(self,node_id,x=None,y=None):
-        source=self.node(node_id)
-        if source.get('external'):raise ValueError('Copy external libraries into the project before duplicating them.')
-        if source['type']!='blend':raise ValueError('Select a Blend File.')
-        parent=self.path(source).parent
-        count=1
-        while (parent/f'{self.path(source).stem} Copy {count:03}.blend').exists():count+=1
-        target=parent/f'{self.path(source).stem} Copy {count:03}.blend'
-        cloned={'id':uid(),'type':'blend','name':source['name']+' Copy','path':target.relative_to(self.root).as_posix(),
-                'x':x if x is not None else source['x']+290,'y':y if y is not None else source['y'],
-                'snapshots':[],'group':source.get('group'),'hidden':False}
-        # Same parent keeps all relative dependencies valid, and the working file is copied independently.
-        before=digest(self.path(source));shutil.copy2(self.path(source),target)
-        if digest(self.path(source))!=before or digest(target)!=before:
-            target.unlink();raise ValueError('Source changed during duplication; save and retry.')
-        self.data['nodes'].append(cloned);self.inspect(cloned);self.save();return self.state()
     def snapshot(self,node_id,note=''):
         if self.node(node_id).get('external'):raise ValueError('Collect this external library into the project before managing its history.')
         result=super().snapshot(node_id,note)
@@ -185,7 +216,7 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
     def graph_edit(self,node_id,group=None,collapsed=None,history_open=None,hidden=None,width=None,height=None,collections_closed=None,notes=None,color=None,stage=None,pinned_collections=None):
         node=self.node(node_id)
         if group:
-            if self.node(group)['type']!='folder' or group==node_id:raise ValueError('Choose a different folder frame.')
+            if self.node(group)['type'] not in {'folder','frame'} or group==node_id:raise ValueError('Choose a different frame or folder.')
             check=copy.deepcopy(self.data['nodes'])
             next(n for n in check if n['id']==node_id)['group']=group
             self.validate_groups(check)
@@ -350,13 +381,6 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
                                 'items':fresh,'mode':mode,'scene':scene,'camera':camera})
         target['last_link_batch']={'source_id':source_id,'items':fresh,'mode':mode,'created':stamp()}
         self.inspect(target);self.save();return self.state()
-    def companion_render(self,node_id,scene,camera,start,end,percentage=100,prefix='render',folder_name='Outputs'):
-        folder_name=name(folder_name)
-        folder=next((n for n in self.data['nodes'] if n['type']=='folder' and n['path']==folder_name),None)
-        if not folder:
-            self.folder(folder_name);folder=self.data['nodes'][-1]
-        self.render_config(node_id,folder['id'],scene,camera,start,end,percentage,prefix)
-        return self.queue_render(node_id)
     def adopt(self,node_id,source,closed):
         node=self.node(node_id);self.ensure_closed(node,closed)
         source=Path(source).resolve()
@@ -368,41 +392,6 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
         target.parent.mkdir(parents=True,exist_ok=True)
         self.transaction(node,{'action':'create','template':str(source)},new=not target.exists())
         self.inspect(node);self.save();return self.state()
-    def relocate(self,node_id,folder_id,title,closed):
-        node=self.node(node_id);self.ensure_closed(node,closed)
-        if node['type']!='blend':raise ValueError('Only Blend Files can be moved.')
-        parent=self.path(self.node(folder_id)) if folder_id else self.root
-        if folder_id and self.node(folder_id)['type']!='folder':raise ValueError('Choose a folder.')
-        title=name(title);title=title if title.lower().endswith('.blend') else title+'.blend'
-        destination=parent/title;old=self.path(node);old_relative=node['path'];old_name=node['name'];old_group=node.get('group')
-        if destination==old:return self.state()
-        if destination.exists():raise ValueError('Destination exists; choose another name.')
-        self.refresh()
-        if any(n.get('scan',{}).get('error') for n in self.data['nodes'] if n['type']=='blend'):
-            raise ValueError('Resolve file scan errors before moving files so all registered dependents can be repaired.')
-        dependents=[n for n in self.data['nodes'] if n['type']=='blend' and n['id']!=node_id and any(r['kind']=='Library' and os.path.normcase(str(Path(r['path']).resolve()))==os.path.normcase(str(old)) for r in n.get('scan',{}).get('refs',[]))]
-        for dependent in dependents:self.ensure_closed(dependent,closed)
-        for n in [node,*dependents]:
-            for item in n['snapshots']:item.setdefault('origin_path',n['path'])
-            self.snapshot(n['id'],'Before moving '+old.name)
-        # Staged outputs and recovery copies allow all-or-nothing rollback of registered working files.
-        recovery={n['id']:(self.root/n['snapshots'][-1]['path']) for n in [node,*dependents]}
-        staged=dict(node,path=destination.relative_to(self.root).as_posix())
-        try:
-            self.transaction(staged,{'action':'create','template':str(old)},new=True)
-            for dependent in dependents:
-                self.transaction(dependent,{'action':'repair_paths','old':str(old),'new':str(destination)})
-            node.update(path=staged['path'],name=destination.stem,group=folder_id)
-            old.unlink()
-        except Exception:
-            for n in [node,*dependents]:
-                original=old if n['id']==node_id else self.path(n)
-                shutil.copy2(recovery[n['id']],original)
-            node.update(path=old_relative,name=old_name,group=old_group)
-            destination.unlink(missing_ok=True)
-            raise
-        self.data.setdefault('path_aliases',{})[old_relative]=node['path']
-        self.refresh();return self.state()
     def restore(self,node_id,snapshot_id,closed):
         node=self.node(node_id);item=next(s for s in node['snapshots'] if s['id']==snapshot_id)
         origin=item.get('origin_path',node['path'])
@@ -445,6 +434,7 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
         node=self.node(node_id);self.ensure_closed(node,closed)
         self.snapshot(node_id,'Before refreshing linked assets')
         self.transaction(node,{'action':'reload_libraries'})
+        node.pop('dependency_hashes',None)
         self.inspect(node);self.save();return self.state()
     def preflight(self):
         self.refresh();issues=[]
@@ -482,13 +472,13 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
             os.replace(temp,destination)
         finally:temp.unlink(missing_ok=True)
         result=self.state();result['notice']='Backup created: '+str(destination)+(f' · {len(issues)} warnings' if issues else ' · relative dependencies verified');return result
-    def render_config(self,node_id,folder_id,scene,camera='',start=None,end=None,percentage=None,prefix=None,auto_prefix=False,width=None,height=None,samples=None,engine=None,format=None,denoise=None,advanced=None):
+    def render_config(self,node_id,folder_id,scene,camera='',start=None,end=None,percentage=None,prefix=None,auto_prefix=False,width=None,height=None,samples=None,engine=None,format=None,denoise=None,advanced=None,step=None):
         node=self.node(node_id)
         if node.get('external'):raise ValueError('Collect the external library before configuring renders.')
         if node['type']!='blend' or self.node(folder_id)['type']!='folder':raise ValueError('Choose a Blend File and output folder.')
         auto_prefix=bool(auto_prefix or prefix is None)
         config={'folder_id':folder_id,'scene':scene,'camera':camera,'start':start,'end':end,'percentage':percentage,'prefix':name(dated_prefix(scene) if auto_prefix else prefix),'auto_prefix':auto_prefix}
-        config.update({k:v for k,v in dict(width=width,height=height,samples=samples,engine=engine,format=format,denoise=denoise).items() if v is not None})
+        config.update({k:v for k,v in dict(width=width,height=height,samples=samples,engine=engine,format=format,denoise=denoise,step=step).items() if v is not None})
         if advanced:config['advanced']=self.checked_overrides({'advanced':advanced})['advanced']
         checked=self.effective_render(node,config)
         # Keep inheritance as null; saved scene settings are read again when the job starts.
@@ -496,60 +486,85 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
             if key in config and config[key] is not None and key in {'start','end','percentage','width','height','samples','engine','format','denoise'}:config[key]=value
         node['render_config']=config
         self.save();return self.state()
-    def render_start(self,node_id,settings=None,overrides=None,batch_id=None,label='',expected_inputs=None):
+    def render_start(self,node_id,settings=None,overrides=None,batch_id=None,label='',expected_inputs=None,allow_image_warnings=False,expected_image_warnings=None,expected_images=None):
+        if getattr(self,'_render_shutdown',False):raise ValueError('The local application is closing.')
+        if type(allow_image_warnings) is not bool:raise ValueError('Image warning consent must be enabled or disabled.')
         node=self.node(node_id);base_config=copy.deepcopy(settings if settings is not None else node.get('render_config'));config=copy.deepcopy(base_config)
         if self.companion and any(s['dirty'] for s in self.companion.opened(self.path(node))):raise ValueError('Save the unsaved Blender session before rendering.')
         if any(r['status']=='Rendering' for r in self.data.get('renders',[])):raise ValueError('Another render is active. Add this file to the sequential queue instead.')
         if not config:raise ValueError('Configure an output folder, scene, camera and frames first.')
-        if config.get('auto_prefix'):config['prefix']=dated_prefix(config['scene'])
+        if config.get('auto_prefix'):config['prefix']=dated_prefix(config['scene'] + ('_' + config['view_layer'] if config.get('view_layer') else '_All_layers' if config.get('operation_id') else ''))
         if any(r['node_id']==node_id and r['status']=='Rendering' for r in self.data.get('renders',[])):raise ValueError('This file is already rendering.')
-        self.refresh()
+        self.refresh_render_sources()
         config=self.effective_render(node,config,overrides)
-        if config.get('auto_prefix'):config['prefix']=dated_prefix(config['scene'])
-        lookup={os.path.normcase(str(self.path(n))):n for n in self.data['nodes'] if n['type']=='blend'}
-        pending=[self.path(node)];files=set();visited=set();issues=[]
-        while pending:
-            path=pending.pop();key=os.path.normcase(str(path.resolve()))
-            if key in visited:continue
-            visited.add(key);source=lookup.get(key)
-            if not source:issues.append('Register linked file: '+str(path));continue
-            if source['scan'].get('error'):issues.append(source['scan']['error']);continue
-            if self.companion and any(s['dirty'] for s in self.companion.opened(path)):issues.append('Save unsaved linked input: '+str(path))
-            files.add(path)
-            for ref in source['scan']['refs']:
-                dependency=Path(ref['path']).resolve()
-                if not ref['exists'] or ref['pattern'] or not ref['inside'] or not ref['relative'] or not dependency.is_file():issues.append('Resolve dependency before rendering: '+str(dependency));continue
-                files.add(dependency)
-                if ref['kind']=='Library':pending.append(dependency)
-        if issues:raise ValueError('\n'.join(sorted(set(issues))))
-        if expected_inputs is not None:
-            current={path.relative_to(self.root).as_posix():digest(path) for path in files}
-            if current!=expected_inputs:raise ValueError('Queued render inputs changed. Queue a new render to use the new saved state.')
+        if config.get('auto_prefix'):config['prefix']=dated_prefix(config['scene'] + ('_' + config['view_layer'] if config.get('view_layer') else '_All_layers' if config.get('operation_id') else ''))
+        image_warnings=[];image_inputs=[];image_notices=[]
+        current=self.capture_render_inputs(node,allow_image_warnings=allow_image_warnings,warnings=image_warnings,images=image_inputs,notices=image_notices)
+        if expected_image_warnings is not None and warning_keys(image_warnings)!=warning_keys(expected_image_warnings):
+            raise ValueError('Image dependency warnings changed after submission. Queue a new render to review them.')
+        if expected_inputs is not None and current!=expected_inputs:raise ValueError('Queued render inputs changed. Queue a new render to use the new saved state.')
+        if expected_images is not None and image_identity(image_inputs)!=image_identity(expected_images):raise ValueError('Queued images changed. Queue a new render to use the new saved state.')
+        files=[self.root/relative for relative in current]
         output_folder=self.path(self.node(config['folder_id']))
+        if config.get('output_subfolder'):
+            relative=Path(config['output_subfolder'])
+            if relative.is_absolute() or '..' in relative.parts or not relative.parts:raise ValueError('Invalid setup output directory.')
+            for part in relative.parts:name(part)
+            nested=(output_folder/relative).resolve()
+            if not nested.is_relative_to(output_folder):raise ValueError('Invalid scene output directory.')
+            output_folder=nested
         stem=self.path(node).stem
-        number=1+max([0]+[r['number'] for r in self.data.get('renders',[]) if r['node_id']==node_id])
+        versions = [r['number'] for r in self.data.get('renders', [])
+                    if ((r.get('operation_id'), r.get('target_id')) == (config['operation_id'], config['target_id'])
+                        if config.get('operation_id') else r['node_id'] == node_id)]
+        number = 1 + max([0, *versions])
         while (output_folder/f'{stem}_r{number:03}').exists():number+=1
         output=output_folder/f'{stem}_r{number:03}';output.mkdir(parents=True)
         run_id=uid();inputs=self.root/META/'render-inputs'/run_id;inputs.mkdir(parents=True)
-        hashes={}
+        hashes={};signatures={}
         log=output/'render.log';job=output/'render-job.json'
-        atomic_json(job,dict(config,input=str(inputs/node['path']),output=str(output),run_id=run_id))
+        atomic_json(job,dict(config,input=str(inputs/node['path']),input_root=str(inputs),project_root=str(self.root),image_inputs=image_inputs,image_warnings=image_warnings+image_notices,output=str(output),run_id=run_id))
         run={'id':run_id,'project_id':self.data['id'],'file_ref':self.resolver.reference(node),'node_id':node_id,'number':number,'created':stamp(),'status':'Preparing','progress':0,
-             'config':copy.deepcopy(config),'base_config':base_config,'overrides':copy.deepcopy(overrides or {}),'batch_id':batch_id,'label':str(label)[:120],'name':node['name'],'output':output.relative_to(self.root).as_posix(),'inputs':inputs.relative_to(self.root).as_posix(),
-             'input_hashes':{},'log':log.relative_to(self.root).as_posix(),'error':'','detail':'','frame':config['start']-1,'finished':''}
+             'config':copy.deepcopy(config),'base_config':base_config,'operation_id':config.get('operation_id'),'target_id':config.get('target_id'),'overrides':copy.deepcopy(overrides or {}),'batch_id':batch_id,'label':str(label)[:120],'name':node['name'],'output':output.relative_to(self.root).as_posix(),'inputs':inputs.relative_to(self.root).as_posix(),
+             'input_hashes':{},'image_inputs':copy.deepcopy(image_inputs),'image_notices':copy.deepcopy(image_notices),'dependency_warnings':copy.deepcopy(image_warnings),'log':log.relative_to(self.root).as_posix(),'error':'','detail':'','frame':config['start']-1,'phase':'Freezing saved inputs','finished':''}
+        if config.get('setup_label'):run['name']=node['name']+' · '+config['setup_label']
         self.data.setdefault('renders',[]).append(run);self.save()
+        preparation_started=time.monotonic()
         try:
+            reusable=next((r for r in reversed(self.data['renders'][:-1]) if batch_id and r.get('batch_id')==batch_id
+                           and r.get('input_hashes')==current and r.get('status')=='Complete'),None)
             for path in files:
                 relative=path.relative_to(self.root);target=inputs/relative;target.parent.mkdir(parents=True,exist_ok=True)
-                before=digest(path);shutil.copy2(path,target)
+                signatures[relative.as_posix()]=file_signature(path)
+                before=digest(path)
+                frozen=(self.root/reusable['inputs']/relative).resolve() if reusable else None
+                # Link only immutable snapshots owned by this batch, never working
+                # files. Each version owns its path and can be deleted independently.
+                if frozen and frozen.is_relative_to((self.root/META/'render-inputs').resolve()) and frozen.is_file() and digest(frozen)==before:
+                    try:os.link(frozen,target)
+                    except OSError:shutil.copy2(path,target)
+                else:shutil.copy2(path,target)
                 if expected_inputs is not None and before!=expected_inputs.get(relative.as_posix()):raise ValueError('Queued input changed during preparation: '+str(path))
                 if digest(path)!=before or digest(target)!=before:raise ValueError('Input changed while freezing: '+str(path))
                 hashes[relative.as_posix()]=before
-            manifest={'config':config,'inputs':hashes,'blender':node['scan'].get('version'),'created':stamp()}
+            freeze_images(self,image_inputs,inputs)
+            manifest={'config':config,'inputs':hashes,'image_inputs':image_inputs,'image_notices':image_notices,'dependency_warnings':image_warnings,'blender':node['scan'].get('version'),'created':stamp()}
             atomic_json(inputs/'manifest.json',manifest)
-            run.update(status='Rendering',input_hashes=copy.deepcopy(hashes));self.save()
+            if getattr(self,'_render_shutdown',False):raise ValueError('The local application closed during render preparation.')
+            run.update(status='Rendering',phase='Starting Blender',started=stamp(),preparation_seconds=round(time.monotonic()-preparation_started,3),input_hashes=copy.deepcopy(hashes),input_signatures=signatures);self.save()
             command=[self.blender,'--background','--factory-startup','--disable-autoexec','--python-exit-code','1','--python',str(BLENDER_SCRIPTS_DIR/'render_job.py'),'--',str(job)]
-            with log.open('wb') as stream:process=subprocess.Popen(command,stdout=stream,stderr=subprocess.STDOUT,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+            if not hasattr(self,'_render_environment'):self._render_environment=render_environment(self.settings_directory)
+            if batch_id:
+                worker=getattr(self,'_render_worker',None)
+                if not worker or worker.batch_id!=batch_id or not worker.usable:
+                    if worker:worker.close()
+                    worker=RenderWorker(self.blender,BLENDER_SCRIPTS_DIR/'render_worker.py',batch_id,self._render_environment)
+                    self._render_worker=worker
+                process=worker.submit(run_id,job,log)
+                run['worker_pid']=process.pid
+            else:
+                with log.open('wb') as stream:process=start_background_process(command,stdout=stream,stderr=subprocess.STDOUT,env=self._render_environment,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+                run['worker_pid']=process.pid
             self.render_processes[run_id]=process
             threading.Thread(target=self.monitor_render,args=(run,process,log),daemon=True).start()
         except Exception as exc:
@@ -563,31 +578,31 @@ class Pipeline(RenderManagement,FolderWorkflow,ExternalLibraries,Templates,Rende
         while process.poll() is None:
             try:
                 lines=log.read_text(encoding='utf-8',errors='replace').splitlines()
-                markers=[json.loads(line.split('PIPELINE_FRAME ',1)[1]) for line in lines if 'PIPELINE_FRAME ' in line]
-                if markers:
-                    frame=markers[-1]['frame'];run['progress']=max(0,min(99,int(100*(frame-run['config']['start']+1)/(run['config']['end']-run['config']['start']+1))))
-                    run['frame']=frame
+                read_markers(lines,run)
                 run['detail']='\n'.join(lines[-4:])[-700:]
             except (OSError,ValueError):pass
             threading.Event().wait(.5)
+        cleanup_background_process(process)
         with self.lock:
             if not self.data or run.get('project_id')!=self.data['id']:return
             if run['id'] in self.render_cancelled:run['status']='Cancelled'
-            elif process.returncode:run.update(status='Failed',error=log.read_text(encoding='utf-8',errors='replace')[-2500:])
+            elif process.returncode:
+                try:detail=log.read_text(encoding='utf-8',errors='replace')[-2500:]
+                except OSError:detail='The render log could not be read.'
+                run.update(status='Failed',error=f'Blender exited with code {process.returncode}.\n'+detail)
             else:run.update(status='Complete',progress=100)
             try:
                 lines=log.read_text(encoding='utf-8',errors='replace').splitlines()
                 run['detail']='\n'.join(lines[-6:])[-1200:]
-                markers=[json.loads(line.split('PIPELINE_FRAME ',1)[1]) for line in lines if line.startswith('PIPELINE_FRAME ')]
-                if markers:run['frame']=markers[-1]['frame']
-                line=next(line for line in lines if line.startswith('PIPELINE_SETTINGS '))
-                run['actual_settings']=json.loads(line.split('PIPELINE_SETTINGS ',1)[1])
-                output_line=next((line for line in lines if line.startswith('PIPELINE_COMPOSITOR_OUTPUTS ')),None)
-                if output_line:run['compositor_outputs']=json.loads(output_line.split('PIPELINE_COMPOSITOR_OUTPUTS ',1)[1])
+                read_markers(lines,run)
             except (OSError,ValueError,StopIteration):pass
             run['finished']=stamp()
             try:self.render_sizes(run)
             except OSError:pass
+            if run['status']=='Complete' and not run.get('file_count'):
+                run.update(status='Failed',progress=0,error='Blender exited without saving render output. Check the render log before retrying.')
+            run['phase']=run['status']
+            self.render_processes.pop(run['id'],None)
             self._folder_cache={};self.save()
     def render_cancel(self,run_id):
         process=self.render_processes.get(run_id)

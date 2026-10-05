@@ -4,20 +4,13 @@ function paintNavigator(...args){return PipelineUI.call('paintNavigator',...args
 const uxDrag=drag;
 let inspectorTab='overview',navigatorOpen=false,inspectorOpen=true,layoutUndo=[],layoutRedo=[],undoProject=null;
 let blankPress=null;
-const actionNames={blend:'Creating file',folder:'Creating folder',refresh:'Reading saved file',snapshot:'Saving snapshot',duplicate:'Duplicating file',link:'Updating collection link',relocate:'Moving file',backup:'Backing up project',render_start:'Preparing render',graph_edit:'Saving workspace',label:'Renaming label'};
+const actionNames={blend:'Creating file',folder:'Creating folder',refresh:'Reading saved file',snapshot:'Saving snapshot',duplicate:'Duplicating file',link:'Updating collection link',relocate:'Moving file',backup:'Backing up project',render_start:'Preparing render',graph_edit:'Saving workspace',label:'Renaming node / file'};
 function actions(...items){const row=el('div',undefined,'uxActions');row.append(...items);return row;}
 function section(title,...items){const box=el('section',undefined,'uxSection');box.append(el('h4',title),...items);return box;}
 function muted(text){return el('p',text,'muted');}
 function badge(text,tone=''){return el('span',text,'uxBadge '+tone);}
 function focusNode(n){if(n.hidden){editGraph(n,{hidden:false});}const group=state.project.nodes.find(f=>f.id===n.group);if(group?.collapsed)editGraph(group,{collapsed:false});pick(n.id);reveal(n);render();}
-function nodeMenu(n,anchor){
-  const menu=$('contextMenu');menu.replaceChildren();
-  menu.append(el('div',n.name,'uxMenuTitle'));
-  if(n.type==='blend')menu.append(button('Open in Blender',()=>run('launch',{node_id:n.id})),button('Refresh saved file · F5',()=>run('refresh',{node_id:n.id})),button('Save snapshot',()=>run('snapshot',{node_id:n.id})),button('Duplicate file · Ctrl D',()=>run('duplicate',{node_id:n.id,...placement()})),button('Render settings',()=>{inspectorTab='render';pick(n.id);configureRender(n);}));
-  else menu.append(button('Open folder',()=>run('launch',{node_id:n.id})),button('Add file inside folder',()=>startPlacement(n.id)));
-  menu.append(button('Edit display name · F2',()=>labelEdit(n)),button('File details',()=>{inspectorTab='overview';pick(n.id);}),button('Remove from graph',()=>editGraph(n,{hidden:true})));
-  const r=anchor.getBoundingClientRect();menu.style.left=Math.max(8,Math.min(r.left,innerWidth-240))+'px';menu.style.top=Math.max(40,Math.min(r.bottom+4,innerHeight-340))+'px';menu.hidden=false;
-}
+let nodeMenu; // Menus are owned by graph_menu.js.
 // Preserve the existing controls and their handlers before moving them into menus.
 const toolbar=document.querySelector('body > header'),controls=new Map([...toolbar.children].filter(e=>e.id).map(e=>[e.id,e]));
 const autoLabel=$('autoRefresh').parentElement,emptyLabel=$('hideEmpty').parentElement;
@@ -59,7 +52,7 @@ PipelineUI.use('render','workspace-layout',200,function(next){
       const imports=[...new Set((n.scan?.instances||[]).map(i=>i.collection))];if(imports.length){const incoming=el('div',imports.slice(0,3).join(' · ')+(imports.length>3?' · +'+(imports.length-3):''),'uxIncoming');incoming.title=imports.join('\n');inputRow.after(incoming);}
       const caption=body.querySelector('.caption');if(caption)caption.textContent=(n.collections_closed?'▸':'▾')+' Collections';
       const nodeHistory=body.querySelector('.nodeHistory');nodeHistory.classList.toggle('uxHistoryExpanded',!!n.history_open);const historyButton=nodeHistory.querySelector('button');historyButton.className='uxHistoryToggle';historyButton.title='Expand snapshots · full history in Details';
-      const output=body.querySelector('.renderOutput');output.classList.add('uxOutputRow');output.title='Drag the blue socket to an output Folder';
+      const output=body.querySelector('.renderOutput');output.classList.add('uxOutputRow');output.title='Drag the blue socket to a Render node, Folder, or empty canvas';
       const stateLabel=body.querySelector('.nodeStatus');body.append(stateLabel);
       if(n.notes){const note=el('div',n.notes.split('\n')[0],'uxNodeNote');note.title=n.notes;head.after(note);}
       card.ondblclick=e=>{if(e.target.closest('header,button,input,.port,.collection,.caption'))return;run('launch',{node_id:n.id});};
@@ -93,8 +86,9 @@ PipelineUI.use('inspect','file-details',202,function(next){
   if(n.type==='folder'){
     pane.append(section('Folder',el('p',n.path,'uxPath'),actions(button('Open folder',()=>run('launch',{node_id:n.id})),button('Add Blend File',()=>startPlacement(n.id))),muted('The frame groups files visually. Use Move / rename in a file’s details to change its disk location.')));
     const children=state.project.nodes.filter(c=>c.group===n.id&&!c.hidden);pane.append(section('Grouped files',...children.map(c=>button(c.name,()=>focusNode(c))),button(n.collapsed?'Expand frame':'Collapse frame',()=>editGraph(n,{collapsed:!n.collapsed}))));
-    pane.append(section('Appearance',button('Edit label',()=>labelEdit(n)),button('Remove from graph',()=>editGraph(n,{hidden:true}))));return;
+    pane.append(section('Appearance',button('Rename',()=>labelEdit(n)),button('Remove from graph',()=>editGraph(n,{hidden:true}))));return;
   }
+  if(n.type!=='blend')return;
   const tabs=el('div',undefined,'uxTabs');tabs.setAttribute('role','tablist');for(const [key,label] of [['overview','File'],['history','History'],['render','Render'],['links','Links']]){const b=button(label,()=>{inspectorTab=key;inspect();});b.setAttribute('role','tab');b.setAttribute('aria-selected',String(inspectorTab===key));b.classList.toggle('active',inspectorTab===key);tabs.append(b);}pane.append(tabs);
   const content=el('div',undefined,'uxTabContent');content.setAttribute('role','tabpanel');pane.append(content);
   if(n.last_error)content.append(section('Operation failed',el('p',n.last_error.message,'warning'),actions(button('Retry',()=>run(n.last_error.action,n.last_error.args)),button('Dismiss',()=>run('dismiss_error',{node_id:n.id})))));
@@ -104,7 +98,7 @@ PipelineUI.use('inspect','file-details',202,function(next){
     const color=el('select');color.setAttribute('aria-label','Node color');for(const value of ['default','blue','green','purple','orange','red']){const o=el('option',value==='default'?'Default color':value[0].toUpperCase()+value.slice(1));o.value=value;color.append(o);}color.value=n.color||'default';color.onchange=()=>editGraph(n,{color:color.value});
     const group=el('select');group.setAttribute('aria-label','Visual folder');for(const item of [{value:'',label:'No folder frame'},...state.project.nodes.filter(f=>f.type==='folder'&&!f.hidden).map(f=>({value:f.id,label:f.name}))]){const o=el('option',item.label);o.value=item.value;group.append(o);}group.value=n.group||'';group.onchange=()=>editGraph(n,{group:group.value||null});
     content.append(section('Organization',el('label','Notes'),notes,el('label','Node color'),color,el('label','Visual folder'),group));
-    content.append(section('File management',actions(button('Duplicate',()=>run('duplicate',{node_id:n.id,...placement()})),button('Edit label',()=>labelEdit(n))),actions(button('Move / rename',()=>relocateFile(n)),button('Adopt saved file',()=>locateFile(n))),button('Remove from graph',()=>editGraph(n,{hidden:true})),muted('Remove keeps the file on disk. Move and Adopt require saved, closed Blender sessions.')));
+    content.append(section('File management',actions(button('Duplicate',()=>run('duplicate',{node_id:n.id,...placement()})),button('Rename',()=>labelEdit(n))),actions(button('Move / rename',()=>relocateFile(n)),button('Adopt saved file',()=>locateFile(n))),button('Remove from graph',()=>editGraph(n,{hidden:true})),muted('Remove keeps the file on disk. Move and Adopt require saved, closed Blender sessions.')));
     if(n.scan?.error)content.append(section('Cannot read file',el('p',n.scan.error,'warning')));
   }else if(inspectorTab==='history'){
     const history=section('Saved states',button('Save snapshot',()=>run('snapshot',{node_id:n.id})),muted('Captures the last saved file. Linked assets remain separate. Restore first saves the current working copy.'));
@@ -119,7 +113,7 @@ PipelineUI.use('inspect','file-details',202,function(next){
     const refs=n.scan?.refs||[];content.append(section('External references',...(refs.length?refs.map(r=>{const box=el('div',undefined,'uxLinkItem');box.append(el('strong',r.kind+' · '+(r.name||'')),el('p',r.raw,'uxPath'));if(!r.exists||r.pattern||!r.relative||!r.inside)box.append(badge(!r.exists?'Missing':r.pattern?'Pattern':!r.inside?'Outside project':'Absolute path','danger'));return box;}):[muted('No external references found.')]))) ;
   }
 });
-PipelineUI.use('paintTasks','workflow-status',203,function(next){next();for(const n of state.project?.nodes||[]){const card=document.querySelector(`[data-id="${n.id}"]`);if(!card)continue;const text=card.querySelector('.nodeStatus'),job=state.jobs?.find(j=>j.node_id===n.id&&['Running','Queued'].includes(j.status)),r=state.project.renders?.find(r=>r.node_id===n.id&&r.status==='Rendering');if(text){text.textContent=job?(actionNames[job.action]||'Working')+'…':r?`Rendering · ${r.progress}%`:problem(n);text.classList.toggle('warning',!!n.last_error||!!n.scan?.error);text.classList.toggle('ready',text.textContent==='Ready');}card.classList.toggle('uxDropTarget',!!wire&&(wire.render?n.type==='folder':n.type==='blend'&&!n.external&&n.id!==wire.source));}const running=state.jobs?.filter(j=>['Running','Queued'].includes(j.status))||[];if(running.length)$('taskMessage').textContent=running.map(j=>actionNames[j.action]||j.action).join(' · ');});
+PipelineUI.use('paintTasks','workflow-status',203,function(next){next();for(const n of state.project?.nodes||[]){const card=document.querySelector(`[data-id="${n.id}"]`);if(!card)continue;const text=card.querySelector('.nodeStatus'),job=state.jobs?.find(j=>j.node_id===n.id&&['Running','Queued'].includes(j.status)),r=state.project.renders?.find(r=>r.node_id===n.id&&r.status==='Rendering');if(text){text.textContent=job?(actionNames[job.action]||'Working')+'…':r?`Rendering · ${r.progress}%`:problem(n);text.classList.toggle('warning',!!n.last_error||!!n.scan?.error);text.classList.toggle('ready',text.textContent==='Ready');}card.classList.toggle('uxDropTarget',!!wire&&(wire.render?n.type==='folder':n.type==='blend'&&!n.external&&n.id!==wire.source));}const running=state.jobs?.filter(j=>['Running','Queued'].includes(j.status))||[];if(running.length&&!$('taskMessage').dataset.activityOwner)$('taskMessage').textContent=running.map(j=>actionNames[j.action]||j.action).join(' · ');});
 function layoutState(){return {project:state.project?.id,nodes:(state.project?.nodes||[]).map(n=>({id:n.id,x:n.x,y:n.y,width:n.width,height:n.height,group:n.group||null})),view:{...view}};}
 function rememberLayout(snapshot){if(!snapshot.project)return;const previous=layoutUndo.at(-1);if(JSON.stringify(previous?.nodes)===JSON.stringify(snapshot.nodes))return;layoutUndo.push(snapshot);if(layoutUndo.length>40)layoutUndo.shift();layoutRedo=[];}
 drag=function(e){if(move?.type==='node'&&!move.uxRecorded){move.uxRecorded=true;rememberLayout(layoutState());}uxDrag(e);};
@@ -137,7 +131,7 @@ function arrangeGraph(){
   }render();persist();controls.get('frame').click();status('Arranged by dependency · Ctrl Z undoes layout');
 }
 viewList.append(button('Arrange by dependency',arrangeGraph),button('Undo layout · Ctrl Z',()=>undoLayout()),button('Redo layout · Ctrl Shift Z',()=>undoLayout(true)));
-function showShortcuts(){modal('Keyboard shortcuts',[],()=>{});$('fields').append(muted('Ctrl K — commands / find a file\nF2 — edit selected label\nF5 — refresh selected file\nCtrl D — duplicate selected file\nHome — frame all\nN — toggle details\nCtrl Z / Ctrl Shift Z — undo / redo layout only\nShift-click — add to selection\nShift-drag canvas — box select\nMiddle mouse — pan\nWheel — zoom\nEscape — cancel placement or connection'));$('submit').textContent='Done';}
+function showShortcuts(){modal('Keyboard shortcuts',[],()=>{});$('fields').append(muted('Ctrl K — commands / find a file\nF2 — rename selected node / file\nF5 — refresh selected file\nCtrl C / Ctrl V — copy / paste selected nodes\nCtrl D — duplicate selected nodes\nHome — frame all\nN — toggle details\nCtrl Z / Ctrl Shift Z — undo / redo layout only\nShift-click — add to selection\nLeft-drag canvas — box select\nMiddle mouse — pan\nWheel — zoom\nEscape — cancel placement or connection'));$('submit').textContent='Done';}
 const uxModal=modal;modal=function(title,fields,callback){$('submit').textContent='Confirm';uxModal(title,fields,callback);requestAnimationFrame(()=>{const input=$('fields').querySelector('input:not([type=checkbox]),select');input?.focus();});};
 function openCommands(){
   if($('dialog').open)return;const palette=$('commandPalette');palette.showModal();$('commandQuery').value='';paintCommands('');$('commandQuery').focus();

@@ -1,0 +1,26 @@
+/* Outputs are a workspace; graph nodes remain compact and previews load on demand. */
+body.outputWorkspace #workspace,body.outputWorkspace #inspector,body.outputWorkspace #inspectorResize{visibility:hidden;pointer-events:none}
+#outputBrowser[open]{position:fixed;inset:36px 0 26px;margin:0;width:auto;max-width:none;height:auto;max-height:none;border:0;border-radius:0;padding:0;display:flex;flex-direction:column;background:#303030;z-index:16;overflow:hidden}
+body.outputWorkspace.navigatorOpen #outputBrowser[open]{left:var(--navigator-width)}
+.obHead{display:flex;align-items:center;gap:9px;min-height:39px;padding:6px 12px;background:#292929;border-bottom:1px solid #181818;flex-shrink:0}
+.obHead>strong{font-size:12px}.obHead select{width:min(270px,35vw);min-width:100px}.obHead .obBack{margin-left:auto}
+.obSplit{display:grid;grid-template-columns:minmax(270px,330px) minmax(0,1fr);flex:1;min-height:0}
+.obListPane{display:flex;flex-direction:column;border-right:1px solid #1f1f1f;min-height:0;background:#363636}
+.obSearch{margin:8px;width:calc(100% - 16px);flex-shrink:0}.obList{overflow:auto;min-height:0;scrollbar-width:thin}
+.obResult{padding:8px 9px;border-bottom:1px solid #ffffff0d}.obResult.selected{background:#42515c;border-left:2px solid #92b7d1;padding-left:7px}
+.obResultTop{display:flex;align-items:center;gap:5px}.obResultMain{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start!important;text-align:left;border:0;background:transparent;padding:2px 0;gap:3px!important}
+.obResultMain strong{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}.obSource{font-size:10px;color:#b9bdc0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.obFolderAction{width:25px;min-width:25px;min-height:24px;padding:3px!important}.obFolderAction .blIcon{width:14px;height:14px}
+.obMeta{display:flex;align-items:center;gap:7px;font-size:10px;margin:4px 0;color:#bcc5ca;flex-wrap:wrap}.obRevision{font-variant-numeric:tabular-nums;color:#d9e1e6}.obPartial{color:#dcc184}.obEmpty{padding:12px;color:#aaa;font-size:11px}
+.obVersions>summary{font-size:10px;cursor:pointer;color:#acb8bf;padding:4px 0;list-style:revert}.obVersionRow{display:flex;align-items:center;gap:5px;padding:4px 0;border-top:1px solid #ffffff08}.obVersionRow>button:first-child{flex:1;min-width:0;text-align:left;justify-content:flex-start;font-size:10px;padding:3px 4px;overflow:hidden}.obDelete{min-width:23px;width:23px;padding:3px!important;color:#d4a5a0}
+.obSidebar{padding:7px 10px}.obSidebarHead{display:flex;align-items:center;gap:5px;margin-bottom:5px}.obSidebarHead>span{flex:1;font-size:10px;color:#b5c0c6}.obSidebarHead button{font-size:10px}.obSidebar .obResult{padding:7px 0}.obSidebar .obSearch{margin:4px 0 7px;width:100%}
+.obViewer{display:flex;flex-direction:column;min-width:0;min-height:0;background:#252525}.obViewerHead{display:flex;align-items:center;gap:8px;min-height:37px;padding:5px 10px;border-bottom:1px solid #161616;flex-shrink:0}.obViewerHead strong{font-size:11px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.obViewerHead select{max-width:190px;min-width:85px}
+.obImageStage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:auto;background:repeating-conic-gradient(#282828 0% 25%,#2d2d2d 0% 50%) 50%/24px 24px}
+.obImageStage>img,.obImageStage>video{display:block;max-width:100%;max-height:100%;object-fit:contain}.obImageStage.actual{display:block}.obImageStage.actual>img{max-width:none;max-height:none;margin:auto}
+.obMediaMessage{position:absolute;inset:auto 12px 12px;background:#202020e8;border:1px solid #444;padding:7px 10px;font-size:11px;color:#c5d1da;pointer-events:none;max-width:calc(100% - 24px);overflow-wrap:anywhere}.obMediaMessage.error{color:#e4b6ab}
+.obTransport{display:flex;align-items:center;gap:7px;padding:6px 10px;border-top:1px solid #161616;flex-shrink:0;min-height:36px}
+.obTransport input[type=range]{flex:1;min-width:40px;padding:0;accent-color:#95b6cc}.obTransport button{min-width:27px;font-size:11px;padding:3px 6px}.obFrameInfo{font-size:10px;color:#b8c3ca;white-space:nowrap;font-variant-numeric:tabular-nums}.obTransport select{width:76px;flex:none;font-size:10px;padding:3px}
+.obViewerHint{margin:auto;color:#aaa;text-align:center;padding:15px;font-size:11px}
+.obVersionRow.active{background:#526775}.obVersionRow.active>button:first-child{color:#fff}
+.folderDetailTabs button.active{border-bottom-color:#90b2ca}
+@media(max-width:800px){.obSplit{grid-template-columns:250px minmax(0,1fr)}.obViewerHead{flex-wrap:wrap}.obViewerHead strong{flex-basis:100%}.obHead{gap:5px}.obHead select{width:140px}.obHead button{font-size:10px}.obFrameInfo{max-width:100px;overflow:hidden;text-overflow:ellipsis}}

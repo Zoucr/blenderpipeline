@@ -47,13 +47,14 @@ with tempfile.TemporaryDirectory(prefix='api-test-') as directory:
         assert any(len(entries)>100 for entries in render_settings['scenes'].values())
         assert b'advancedSettingsEditor' in urllib.request.urlopen(url+'/js/render_settings_ui.js').read()
         assert b'renderWorkspace' in urllib.request.urlopen(url+'/css/render_workspace.css').read()
-        assert node['name']=='Untitled 001' and node['x']==234 and node['y']==345
+        assert node['name']=='Blend 01' and node['x']==234 and node['y']==345
         call('label',{'node_id':node['id'],'title':'Asset display label'})
         result=call('refresh',{'node_id':node['id']})
+        node=next(n for n in result['project']['nodes'] if n['id']==node['id'])
         assert result['project']['nodes'][0]['scan']['collection_details'][0]['objects']==0
         assert not result['files'][node['id']]['changed']
         listing=call('browse_directory',{'path':str(Path(directory)/'API Project'),'extension':'.blend'})
-        assert any(r['name']=='Untitled 001.blend' for r in listing['entries'])
+        assert any(r['name'].endswith('_API_Project_Asset_display_label-v001.blend') for r in listing['entries'])
         project=call('projects',{})['projects'][0]
         assert call('projects',{'mode':'pin','path':project['path']})['projects'][0]['pinned']
         assert not call('projects',{'mode':'remove','path':project['path']})['projects']

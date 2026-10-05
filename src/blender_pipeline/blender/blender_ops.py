@@ -14,6 +14,15 @@ if action == 'create':
         bpy.context.scene.collection.children.link(collection)
         bpy.context.view_layer.active_layer_collection = bpy.context.view_layer.layer_collection.children[collection.name]
     prepare_material_slots(strict=False)
+elif action == 'copy':
+    # Copy the saved state without preparing slots or changing local overrides.
+    import os
+    bpy.ops.wm.open_mainfile(filepath=job['source'])
+    aliases={str(Path(old).resolve()).casefold():new for old,new in job.get('aliases',{}).items()}
+    for library in bpy.data.libraries:
+        original=str(Path(bpy.path.abspath(library.filepath)).resolve()).casefold()
+        if not library.parent and original in aliases:
+            library.filepath='//'+os.path.relpath(aliases[original],str(Path(job['source']).parent))
 elif action=='prepare_materials':
     bpy.ops.wm.open_mainfile(filepath=job['target'])
     if job.get('reload'):

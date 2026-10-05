@@ -56,6 +56,10 @@ def validate_project(data):
         if node['id'] in seen:
             raise ValueError('Project contains duplicate node IDs.')
         seen.add(node['id'])
+        if node.get('type') in {'frame', 'export', 'render'}:
+            if 'path' in node or node.get('external'):
+                raise ValueError('Operation nodes and frames do not own working file paths.')
+            continue
         if node.get('type') not in {'blend', 'folder'} or not isinstance(node.get('path'), str):
             raise ValueError('Project contains an invalid file or folder node.')
         raw = node['path']

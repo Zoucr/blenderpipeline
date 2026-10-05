@@ -25,6 +25,8 @@ class FileResolver:
             atomic_json(path, data)
 
     def normalize(self, project_id, node):
+        if node.get('type') in {'frame', 'export', 'render'}:
+            return
         # Existing operation builders can supply a desktop path at registration.
         # Only the local mapping retains it; persisted references are relative.
         if node.get('external'):
@@ -38,10 +40,14 @@ class FileResolver:
             node['storage_id'] = 'project'
 
     def reference(self, node):
+        if node.get('type') in {'frame', 'export', 'render'}:
+            return None
         return {'file_id': node['id'], 'storage_id': node.get('storage_id', 'project'),
                 'relative_path': node['path']}
 
     def resolve(self, root, project_id, node):
+        if node.get('type') in {'frame', 'export', 'render'}:
+            raise ValueError('This graph node has no file or folder on disk.')
         raw = node['path']
         # Temporary operation builders, before normalize/save.
         if node.get('external') and Path(raw).is_absolute():
